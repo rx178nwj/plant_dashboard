@@ -1,0 +1,69 @@
+{% extends "layout.html" %}
+
+{% block title %}Plant Profiles{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2">Interactive Profile Editor</h1>
+</div>
+
+<div class="row">
+    <!-- 左側: センサーリスト -->
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                Select a Plant Sensor
+            </div>
+            <div id="sensor-list" class="list-group list-group-flush">
+                {% for sensor in plant_sensors %}
+                <a href="#" class="list-group-item list-group-item-action" data-device-id="{{ sensor.device_id }}">
+                    {{ sensor.device_name }}
+                    <span class="badge bg-secondary float-end mt-1">...</span>
+                </a>
+                {% else %}
+                <div class="list-group-item">No plant sensors registered.</div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <!-- 右側: 設定エリア -->
+    <div class="col-md-8">
+        <div id="profile-editor-area" class="card" style="display: none;">
+            <div class="card-header">
+                <h5 class="mb-0" id="editor-title"></h5>
+            </div>
+            <div class="card-body">
+                <!-- 現在のセンサー情報 -->
+                <div class="card bg-light mb-4">
+                    <div class="card-body">
+                        <h6 class="card-title">Live Sensor Data</h6>
+                        <div class="row text-center">
+                            <div class="col-4"><strong>Temp:</strong> <span id="live-temp">--</span>°C</div>
+                            <div class="col-4"><strong>Humidity:</strong> <span id="live-humidity">--</span>%</div>
+                            <div class="col-4"><strong>Light:</strong> <span id="live-light">--</span>lx</div>
+                            <div class="col-12 mt-2">
+                                <strong>Soil Moisture Voltage:</strong> 
+                                <span id="live-soil" class="fs-5 fw-bold text-primary">--</span> V
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- プロファイル設定フォーム -->
+                <form id="profile-form">
+                    <input type="hidden" id="profile-id"><input type="hidden" id="selected-device-id">
+                    <div class="row"><div class="col-md-6 mb-3"><label for="profile-name" class="form-label">Profile Name</label><input type="text" class="form-control" id="profile-name" required placeholder="e.g., General Cactus"></div><div class="col-md-6 mb-3"><label for="plant-type" class="form-label">Plant Type</label><select id="plant-type" class="form-select"><option>Cactus</option><option>Succulent</option><option>Foliage Plant</option></select></div></div><hr><h6><i class="bi bi-thermometer-half"></i> Growth & Dormancy Periods (by Temperature)</h6><div class="row"><div class="col-md-4 mb-3"><label class="form-label">Growing Season (°C)</label><div class="input-group"><input type="number" id="growing-temp-min" class="form-control" placeholder="Min"><input type="number" id="growing-temp-max" class="form-control" placeholder="Max"></div></div><div class="col-md-4 mb-3"><label for="hot-dormancy-temp-min" class="form-label">Hot Dormancy starts above (°C)</label><input type="number" id="hot-dormancy-temp-min" class="form-control"></div><div class="col-md-4 mb-3"><label for="cold-dormancy-temp-max" class="form-label">Cold Dormancy starts below (°C)</label><input type="number" id="cold-dormancy-temp-max" class="form-control"></div></div><hr><h6><i class="bi bi-droplet-fill"></i> Watering Settings</h6><div class="row"><div class="col-md-6 mb-3"><label for="watering-trigger" class="form-label">Watering Trigger</label><select id="watering-trigger" class="form-select"><option value="dry">When soil is dry</option><option value="optimal">Keep soil in optimal range</option></select></div><div class="col-md-6 mb-3"><label for="watering-interval-days" class="form-label">Check again after (days)</label><input type="number" id="watering-interval-days" class="form-control" value="1"></div></div><hr><h6><i class="bi bi-lightning-charge"></i> Soil Sensor Voltage Settings</h6><div class="row"><div class="col-md-3 mb-3"><label class="form-label">Over-wet (V)</label><input type="number" step="0.01" id="soil-voltage-wet" class="form-control"></div><div class="col-md-6 mb-3"><label class="form-label">Optimal Range (V)</label><div class="input-group"><input type="number" step="0.01" id="soil-voltage-optimal-min" class="form-control" placeholder="Min"><input type="number" step="0.01" id="soil-voltage-optimal-max" class="form-control" placeholder="Max"></div></div><div class="col-md-3 mb-3"><label class="form-label">Dry (V)</label><input type="number" step="0.01" id="soil-voltage-dry" class="form-control"></div></div>
+                </form>
+            </div>
+            <div class="card-footer text-end">
+                <button class="btn btn-primary" id="save-profile-btn">Save Profile</button>
+            </div>
+        </div>
+        <div id="profile-editor-placeholder" class="text-center text-muted pt-5">
+            <p><i class="bi bi-arrow-left-circle fs-1"></i></p>
+            <h4>Select a sensor to begin</h4>
+        </div>
+    </div>
+</div>
+{% endblock %}

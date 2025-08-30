@@ -1,0 +1,79 @@
+{% extends "layout.html" %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<div id="dashboard-page" data-selected-date="{{ selected_date }}" data-is-today="{{ is_today }}">
+
+    <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+        <h1 class="h2">Dashboard</h1>
+        <div class="d-flex align-items-center">
+            <label for="dashboard-date-picker" class="col-form-label me-2">Date:</label>
+            <input type="date" id="dashboard-date-picker" class="form-control" style="width: auto;" value="{{ selected_date }}">
+        </div>
+    </div>
+
+    <!-- デバイスカード -->
+    <div id="device-cards-container" class="row">
+        {% for device in devices %}
+        <div class="col-xl-3 col-lg-4 col-md-6 mb-4">
+            <div id="device-card-{{ device.device_id }}" class="card h-100 shadow-sm device-card status-{{ device.connection_status | default('initializing') }}">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">{{ device.device_name }}</h5>
+                    <span id="status-icon-{{ device.device_id }}" class="status-icon"><i class="bi bi-question-circle"></i></span>
+                </div>
+                <div class="card-body">
+                    <div class="row text-center">
+                        <div class="col-6 mb-2"><i class="bi bi-thermometer-half text-danger"></i> <span id="temp-{{ device.device_id }}" class="fs-5 fw-bold">{{ device.last_data.temperature | default(0, true) | round(1) }}</span> °C</div>
+                        <div class="col-6 mb-2"><i class="bi bi-droplet-half text-primary"></i> <span id="humidity-{{ device.device_id }}" class="fs-5 fw-bold">{{ device.last_data.humidity | default(0, true) | round(1) }}</span> %</div>
+                        <div class="col-6"><i class="bi bi-brightness-high text-warning"></i> <span id="light-{{ device.device_id }}" class="fs-5 fw-bold">{{ device.last_data.light_lux | default('--') }}</span> lx</div>
+                        <div class="col-6"><i class="bi bi-moisture text-success"></i> <span id="soil-{{ device.device_id }}" class="fs-5 fw-bold">{{ device.last_data.soil_moisture | default('--') }}</span></div>
+                    </div>
+                </div>
+                <div class="card-footer d-flex justify-content-between align-items-center text-muted">
+                    <div><i class="bi bi-battery-half"></i> <span id="battery-{{ device.device_id }}">{{ device.battery_level | default('--') }}</span>%</div>
+                </div>
+            </div>
+        </div>
+        {% else %}
+            <div class="col"><div class="alert alert-info">No devices found.</div></div>
+        {% endfor %}
+    </div>
+
+    <hr class="my-4">
+
+    <!-- SwitchBot履歴グラフエリア -->
+    <h2 class="h3">Environment History</h2>
+    <div class="row">
+        {% for switchbot in switchbots_for_chart %}
+        <div class="col-lg-6 mb-4">
+            <div class="card shadow-sm">
+                <div class="card-header">
+                    <h5><i class="bi bi-graph-up"></i> {{ switchbot.device_name }}</h5>
+                </div>
+                <div class="card-body">
+                    <div class="btn-group btn-group-sm mb-3" role="group">
+                        <button type="button" class="btn btn-outline-secondary period-btn active" data-period="24h" data-device-id="{{ switchbot.device_id }}">24H</button>
+                        <button type="button" class="btn btn-outline-secondary period-btn" data-period="7d" data-device-id="{{ switchbot.device_id }}">7D</button>
+                        <button type="button" class="btn btn-outline-secondary period-btn" data-period="30d" data-device-id="{{ switchbot.device_id }}">1M</button>
+                        <button type="button" class="btn btn-outline-secondary period-btn" data-period="1y" data-device-id="{{ switchbot.device_id }}">1Y</button>
+                    </div>
+                    <div class="position-relative" style="height:300px">
+                        <canvas id="history-chart-{{ switchbot.device_id }}"></canvas>
+                        <div id="chart-loader-{{ switchbot.device_id }}" class="position-absolute top-50 start-50 translate-middle d-none">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <div class="col">
+            <div class="alert alert-light">No SwitchBot devices registered for history view.</div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

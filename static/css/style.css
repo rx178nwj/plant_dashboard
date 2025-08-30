@@ -1,0 +1,34 @@
+/* plant_dashboard/static/css/style.css */
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.device-card {
+    transition: all 0.3s ease-in-out;
+    border-left-width: 5px;
+}
+
+/* 接続状態に応じたカードのスタイル */
+.device-card.status-initializing {
+    border-left-color: #6c757d; /* secondary */
+}
+.device-card.status-connected {
+    border-left-color: #198754; /* success */
+}
+.device-card.status-disconnected {
+    border-left-color: #dc3545; /* danger */
+}
+.device-card.status-error {
+    border-left-color: #ffc107; /* warning */
+}
+
+.status-icon {
+    font-size: 1.2rem;
+}
+
+.status-icon .bi-check-circle-fill { color: #198754; }
+.status-icon .bi-x-circle-fill { color: #dc3545; }
+.status-icon .bi-exclamation-triangle-fill { color: #ffc107; }
+.status-icon .bi-question-circle { color: #6c757d; }
+
