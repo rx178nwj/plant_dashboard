@@ -4,3 +4,4 @@ gunicorn==20.1.0
 bleak==0.20.2
 httpx==0.25.0
 Flask-WTF==1.1.1
+python-dotenv==0.21.1

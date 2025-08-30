@@ -1,9 +1,14 @@
 # plant_dashboard/app.py
 
-import asyncio, logging, threading, time
-from queue import Queue
-from flask import Flask, request
+import asyncio
+import logging
+import threading
+import os
+from flask import Flask, current_app
+
+# configモジュールをインポート
 import config
+
 from database import init_db
 from device_manager import load_devices_from_db
 from ble_manager import PlantDeviceBLE, get_switchbot_adv_data
@@ -18,9 +23,20 @@ from blueprints.management.routes import management_bp
 logger = logging.getLogger(__name__)
 
 def create_app():
-    """Application Factory: Creates and infigures the Flask app."""
+    """Application Factory: Creates and configures the Flask app."""
     app = Flask(__name__)
+    
+    # config.pyから設定を読み込む
     app.config.from_object(config)
+
+    # アプリケーションコンテキスト内でアップロードフォルダを作成
+    with app.app_context():
+        upload_folder = current_app.config.get('UPLOAD_FOLDER')
+        if upload_folder:
+            os.makedirs(upload_folder, exist_ok=True)
+            logger.info(f"Upload folder '{upload_folder}' is ready.")
+        else:
+            logger.error("UPLOAD_FOLDER is not configured in config.py")
 
     # Blueprintを登録
     app.register_blueprint(dashboard_bp)
@@ -28,10 +44,8 @@ def create_app():
     app.register_blueprint(plants_bp)
     app.register_blueprint(management_bp)
 
-    # ▼▼▼ context_processorをアプリ全体に登録 ▼▼▼
     @app.context_processor
     def inject_nav():
-        """ナビゲーションバーの項目を全てのテンプレートに渡す"""
         return dict(nav_items=[
             {'url': 'dashboard.dashboard', 'icon': 'bi-grid-fill', 'text': 'Dashboard'},
             {'url': 'management.management', 'icon': 'bi-sliders', 'text': 'Management'},
@@ -75,10 +89,9 @@ async def data_collection_loop():
                 else:
                     dm.update_device_status(dev_id, 'disconnected')
             except Exception as e:
-                logger.error(f"Unhandled error in data collection for {dev_id}: {e}")
+                logger.error(f"Unhandled error in data collection for {dev_id}: {e}", exc_info=True)
                 dm.update_device_status(dev_id, 'error')
             
-        # SSEキューに最新のデバイス状態をまとめて送信
         sse_queue.put(dm.get_all_devices())
         await asyncio.sleep(config.DATA_FETCH_INTERVAL)
 
@@ -86,10 +99,10 @@ def run_async_loop():
     asyncio.run(data_collection_loop())
 
 if __name__ == '__main__':
-    # 直接実行された場合のみ、ロギング設定とサーバー起動を行う
     logging.basicConfig(level=config.LOG_LEVEL, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', handlers=[logging.FileHandler(config.LOG_FILE_PATH), logging.StreamHandler()])
     app = create_app()
     init_db()
     bg_thread = threading.Thread(target=run_async_loop, daemon=True)
     bg_thread.start()
     app.run(host='0.0.0.0', port=8000, debug=False)
+

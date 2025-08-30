@@ -4,11 +4,15 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block title %}Plant Dashboard{% endblock %}</title>
+    
+    <!-- Favicon Link -->
+    <link rel="shortcut icon" href="{{ url_for('static', filename='favicon.ico') }}">
+    
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.3/font/bootstrap-icons.css">
 </head>
-<body class="bg-light">
+<body class="d-flex flex-column min-vh-100 bg-light">
 
     <nav class="navbar navbar-expand-lg navbar-dark bg-dark sticky-top">
         <div class="container-fluid">
@@ -32,20 +36,29 @@
         </div>
     </nav>
 
-    <main class="container mt-4">
+    <main class="container mt-4 mb-4">
+        <!-- Main alert box for dynamic messages -->
+        <div id="main-alert-box"></div>
         {% block content %}{% endblock %}
     </main>
 
-    <footer class="text-center text-muted py-4 mt-auto">
-        <p>&copy; 2024 Plant Dashboard</p>
+    <footer class="text-center text-muted py-4 mt-auto bg-white border-top">
+        <p class="mb-0">&copy; 2024 Plant Dashboard</p>
     </footer>
 
+    <!-- JavaScript Libraries -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.2.1/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/date-fns@2.29.3/cdn.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
     
-    <!-- ▼▼▼ 全てのページでmain.jsを読み込むように修正 ▼▼▼ -->
+    <!-- Application-specific JavaScript -->
+    <script src="{{ url_for('static', filename='js/utils.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/device-management.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/plant-library.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/management.js') }}"></script>
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
 </body>
 </html>
+

@@ -1,16 +1,22 @@
 # wsgi.py
-# This file is the entry point for the Gunicorn server.
-
 import threading
+from dotenv import load_dotenv
+
+# -------------------------------------------------------------------
+# ▼▼▼ 最重要修正点 ▼▼▼
+# Gunicornワーカーが起動する際に、他のどのモジュールよりも先に
+# .envファイルから環境変数を読み込むようにします。
+load_dotenv()
+# -------------------------------------------------------------------
+
 from app import create_app, run_async_loop, init_db
 
-# Initialize the database when the server starts.
+# データベースを初期化
 init_db()
 
-# Create the Flask app instance using the factory.
+# Flaskアプリケーションインスタンスを作成
 app = create_app()
 
-# Start the background data collection thread.
-# This is safe for a single-worker setup.
+# バックグラウンドのデータ収集スレッドを開始
 bg_thread = threading.Thread(target=run_async_loop, daemon=True)
 bg_thread.start()

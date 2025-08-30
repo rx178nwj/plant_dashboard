@@ -3,89 +3,92 @@
 {% block title %}Plant Management{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
-    <h1 class="h2">Plant Management</h1>
-</div>
-
-<div class="row">
-    <!-- 左側: 管理植物リスト -->
-    <div class="col-md-4">
-        <div class="card">
-            <div class="card-header d-flex justify-content-between">
-                <span>Managed Plants</span>
-                <button id="add-managed-plant-btn" class="btn btn-primary btn-sm py-0"><i class="bi bi-plus"></i> New</button>
-            </div>
-            <div id="managed-plant-list" class="list-group list-group-flush">
-                {% for plant in managed_plants %}
-                <a href="#" class="list-group-item list-group-item-action" data-managed-plant-id="{{ plant.managed_plant_id }}">
-                    {{ plant.plant_name }}
-                </a>
-                {% else %}
-                <div class="list-group-item">No plants are being managed yet.</div>
-                {% endfor %}
-            </div>
-        </div>
+<div id="management-page">
+    <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+        <h1 class="h2">Plant Management</h1>
     </div>
 
-    <!-- 右側: 設定エリア -->
-    <div class="col-md-8">
-        <div id="editor-area" class="card" style="display: none;">
-            <div class="card-header"><h5 class="mb-0" id="editor-title"></h5></div>
-            <div class="card-body">
-                <form id="management-form">
-                    <input type="hidden" id="managed-plant-id">
-                    
-                    <div class="mb-3">
-                        <label for="plant-name" class="form-label"><strong>Plant Name</strong> (e.g., Living Room Monstera)</label>
-                        <input type="text" id="plant-name" class="form-control" required>
-                    </div>
-                    <hr>
-                    
-                    <h6><i class="bi bi-book"></i> Species Information</h6>
-                    <div class="mb-3">
-                        <label for="library-plant-id" class="form-label">Select from Plant Library</label>
-                        <select id="library-plant-id" class="form-select">
-                            <option value="">- Select Species -</option>
-                            {% for lib_plant in plant_library %}
-                            <option value="{{ lib_plant.plant_id }}">{{ lib_plant.genus }} {{ lib_plant.species }} {{ lib_plant.variety }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div id="species-info-display" class="card bg-light mb-3" style="display: none;"></div>
-                    <hr>
-
-                    <h6><i class="bi bi-hdd-stack"></i> Sensor Assignment</h6>
-                    <div class="row">
-                        <div class="col-md-6 mb-3">
-                            <label for="assigned-switchbot-id" class="form-label">Environment Sensor (SwitchBot)</label>
-                            <select id="assigned-switchbot-id" class="form-select">
-                                <option value="">- Select SwitchBot -</option>
-                                {% for sw in switchbots %}
-                                <option value="{{ sw.device_id }}">{{ sw.device_name }}</option>
-                                {% endfor %}
-                            </select>
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label for="assigned-plant-sensor-id" class="form-label">Soil Sensor (Optional)</label>
-                            <select id="assigned-plant-sensor-id" class="form-select">
-                                <option value="">- None -</option>
-                                {% for ps in plant_sensors %}
-                                <option value="{{ ps.device_id }}">{{ ps.device_name }}</option>
-                                {% endfor %}
-                            </select>
-                        </div>
-                    </div>
-                    <div id="live-data-display" class="card bg-light" style="display: none;"></div>
-                </form>
-            </div>
-            <div class="card-footer text-end">
-                <button class="btn btn-primary" id="save-managed-plant-btn">Save Changes</button>
+    <div class="row">
+        <!-- 左側: 管理植物リスト -->
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between">
+                    <span>Managed Plants</span>
+                    <button id="add-managed-plant-btn" class="btn btn-primary btn-sm py-0"><i class="bi bi-plus"></i> New</button>
+                </div>
+                <div id="managed-plant-list" class="list-group list-group-flush">
+                    {% for plant in managed_plants %}
+                    <a href="#" class="list-group-item list-group-item-action" data-managed-plant-id="{{ plant.managed_plant_id }}">
+                        {{ plant.plant_name }}
+                    </a>
+                    {% else %}
+                    <div class="list-group-item">No plants are being managed yet.</div>
+                    {% endfor %}
+                </div>
             </div>
         </div>
-        <div id="editor-placeholder" class="text-center text-muted pt-5">
-            <p><i class="bi bi-arrow-left-circle fs-1"></i></p>
-            <h4>Select a plant to manage</h4>
+
+        <!-- 右側: 設定エリア -->
+        <div class="col-md-8">
+            <div id="editor-area" class="card" style="display: none;">
+                <div class="card-header"><h5 class="mb-0" id="editor-title"></h5></div>
+                <div class="card-body">
+                    <form id="management-form">
+                        <input type="hidden" id="managed-plant-id">
+                        
+                        <div class="mb-3">
+                            <label for="plant-name" class="form-label"><strong>Plant Name</strong> (e.g., Living Room Monstera)</label>
+                            <input type="text" id="plant-name" class="form-control" required>
+                        </div>
+                        <hr>
+                        
+                        <h6><i class="bi bi-book"></i> Species Information</h6>
+                        <div class="mb-3">
+                            <label for="library-plant-id" class="form-label">Select from Plant Library</label>
+                            <select id="library-plant-id" class="form-select">
+                                <option value="">- Select Species -</option>
+                                {% for lib_plant in plant_library %}
+                                <option value="{{ lib_plant.plant_id }}">{{ lib_plant.genus }} {{ lib_plant.species }} {{ lib_plant.variety }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div id="species-info-display" class="card bg-light mb-3" style="display: none;"></div>
+                        <hr>
+
+                        <h6><i class="bi bi-hdd-stack"></i> Sensor Assignment</h6>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="assigned-switchbot-id" class="form-label">Environment Sensor (SwitchBot)</label>
+                                <select id="assigned-switchbot-id" class="form-select">
+                                    <option value="">- Select SwitchBot -</option>
+                                    {% for sw in switchbots %}
+                                    <option value="{{ sw.device_id }}">{{ sw.device_name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="assigned-plant-sensor-id" class="form-label">Soil Sensor (Optional)</label>
+                                <select id="assigned-plant-sensor-id" class="form-select">
+                                    <option value="">- None -</option>
+                                    {% for ps in plant_sensors %}
+                                    <option value="{{ ps.device_id }}">{{ ps.device_name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                        <div id="live-data-display" class="card bg-light" style="display: none;"></div>
+                    </form>
+                </div>
+                <div class="card-footer text-end">
+                    <button class="btn btn-primary" id="save-managed-plant-btn">Save Changes</button>
+                </div>
+            </div>
+            <div id="editor-placeholder" class="text-center text-muted pt-5">
+                <p><i class="bi bi-arrow-left-circle fs-1"></i></p>
+                <h4>Select a plant to manage</h4>
+            </div>
         </div>
     </div>
 </div>
 {% endblock %}
+

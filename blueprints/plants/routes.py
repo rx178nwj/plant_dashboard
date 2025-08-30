@@ -1,11 +1,13 @@
 # blueprints/plants/routes.py
-from flask import Blueprint, render_template, jsonify, request, current_app
+from flask import Blueprint, render_template, jsonify, request, current_app, url_for
 import device_manager as dm
 import json
 import uuid
-import httpx
-import asyncio
+import os
+from werkzeug.utils import secure_filename
+from lib.gemini_client import lookup_plant_info
 from blueprints.dashboard.routes import requires_auth
+import asyncio # AI検索のためにインポート
 
 plants_bp = Blueprint('plants', __name__, template_folder='../../templates', static_folder='../../static')
 
@@ -13,7 +15,51 @@ plants_bp = Blueprint('plants', __name__, template_folder='../../templates', sta
 @requires_auth
 def plants():
     """植物ライブラリページを表示します。"""
-    return render_template('plants.html')
+    conn = dm.get_db_connection()
+    rows = conn.execute("SELECT * FROM plants ORDER BY genus, species").fetchall()
+    conn.close()
+    
+    # DBから取得したデータを辞書のリストに変換
+    plants_list = [dict(row) for row in rows]
+    
+    # 埋め込み用JSONデータを作成（ネストされたJSON文字列をオブジェクトに変換）
+    for plant in plants_list:
+        if 'monthly_temps_json' in plant and plant['monthly_temps_json']:
+            try:
+                plant['monthly_temps'] = json.loads(plant['monthly_temps_json'])
+            except json.JSONDecodeError:
+                plant['monthly_temps'] = None # パース失敗時はnullにする
+    
+    # テンプレートにリストとJSONの両方を渡す
+    plants_json = json.dumps(plants_list)
+    return render_template('plants.html', plants=plants_list, plants_json=plants_json)
+
+@plants_bp.route('/api/plants/upload-image', methods=['POST'])
+@requires_auth
+def api_upload_image():
+    if 'plant-image-upload' not in request.files:
+        return jsonify({'success': False, 'message': 'No file part'}), 400
+    file = request.files['plant-image-upload']
+    if file.filename == '':
+        return jsonify({'success': False, 'message': 'No selected file'}), 400
+
+    allowed_extensions = current_app.config['ALLOWED_EXTENSIONS']
+    if file and '.' in file.filename and file.filename.rsplit('.', 1)[1].lower() in allowed_extensions:
+        filename = secure_filename(f"plant_{uuid.uuid4().hex[:12]}.{file.filename.rsplit('.', 1)[1].lower()}")
+        upload_folder = current_app.config['UPLOAD_FOLDER']
+        
+        # Make sure the upload folder exists
+        os.makedirs(upload_folder, exist_ok=True)
+        
+        file_path = os.path.join(upload_folder, filename)
+        file.save(file_path)
+        
+        # Return the URL to the uploaded file
+        file_url = url_for('static', filename=os.path.join('uploads/plant_images', filename))
+        return jsonify({'success': True, 'url': file_url})
+    else:
+        return jsonify({'success': False, 'message': 'File type not allowed'}), 400
+
 
 @plants_bp.route('/api/plants/lookup', methods=['POST'])
 @requires_auth
@@ -24,50 +70,13 @@ def api_plant_lookup():
     if not plant_name:
         return jsonify({'success': False, 'message': 'Plant name is required.'}), 400
 
-    async def get_lookup_data():
-        prompt = f"""
-        Search the web to find the most accurate and detailed information for the plant '{plant_name}'.
-        Identify a single, representative native region. Provide monthly climate data for that region.
-        Also, provide distinct temperature ranges for its fast growth, slow growth, hot dormancy, and cold dormancy periods.
-        Provide separate watering instructions for each of these four periods.
-        Also, find a representative, high-quality image of the plant from the web and provide a direct URL to it.
-        I need all information in a structured JSON format. If a value is unknown, use null. All temperatures are in Celsius.
-        
-        JSON format: {{
-          "origin_country": "string", "origin_region": "string",
-          "monthly_temps": {{ "jan": {{"avg": integer, "high": integer, "low": integer}}, ...11 more months... }},
-          "growing_fast_temp_high": integer, "growing_fast_temp_low": integer,
-          "growing_slow_temp_high": integer, "growing_slow_temp_low": integer,
-          "hot_dormancy_temp_high": integer, "hot_dormancy_temp_low": integer,
-          "cold_dormancy_temp_high": integer, "cold_dormancy_temp_low": integer,
-          "lethal_temp_high": integer, "lethal_temp_low": integer,
-          "watering_growing": "string", "watering_slow_growing": "string",
-          "watering_hot_dormancy": "string", "watering_cold_dormancy": "string",
-          "image_url": "string (a direct URL to a representative image)"
-        }}
-        """
-        api_key = current_app.config['GEMINI_API_KEY']
-        if not api_key or api_key == 'YOUR_API_KEY_HERE':
-            raise ValueError("Gemini API key is not configured")
-        api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key={api_key}"
-        payload = {"contents": [{"parts": [{"text": prompt}]}], "generationConfig": {"response_mime_type": "application/json"}}
-        async with httpx.AsyncClient(timeout=45.0) as client:
-            response = await client.post(api_url, json=payload)
-            response.raise_for_status()
-            result = response.json()
-            try:
-                content = result['candidates'][0]['content']['parts'][0]['text']
-                if content.strip().startswith("```json"):
-                    content = content.strip()[7:-3]
-                return json.loads(content)
-            except (KeyError, IndexError, json.JSONDecodeError):
-                raise ValueError("Could not parse Gemini API response.")
     try:
-        response_data = asyncio.run(get_lookup_data())
+        # gemini_clientから関数を呼び出す
+        response_data = asyncio.run(lookup_plant_info(plant_name))
         return jsonify({'success': True, 'data': response_data})
     except Exception as e:
-        # logger.error(f"Plant lookup failed: {e}")
         return jsonify({'success': False, 'message': str(e)}), 500
+
 
 @plants_bp.route('/api/plants', methods=['GET', 'POST'])
 @requires_auth
@@ -97,6 +106,7 @@ def api_plants():
         )
 
         if exists:
+            # Update
             cursor.execute("""
                 UPDATE plants SET genus=?, species=?, variety=?, image_url=?, origin_country=?, origin_region=?, monthly_temps_json=?, 
                 growing_fast_temp_high=?, growing_fast_temp_low=?, growing_slow_temp_high=?, growing_slow_temp_low=?, 
@@ -105,6 +115,7 @@ def api_plants():
                 WHERE plant_id=?
             """, params)
         else:
+            # Insert
             cursor.execute("""
                 INSERT INTO plants (genus, species, variety, image_url, origin_country, origin_region, monthly_temps_json, 
                 growing_fast_temp_high, growing_fast_temp_low, growing_slow_temp_high, growing_slow_temp_low, 
@@ -127,3 +138,4 @@ def api_plants():
             plant_dict['monthly_temps'] = json.loads(plant_dict['monthly_temps_json'])
         results.append(plant_dict)
     return jsonify(results)
+

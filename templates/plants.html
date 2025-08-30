@@ -3,94 +3,133 @@
 {% block title %}Plant Library{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
-    <h1 class="h2">Plant Library</h1>
-</div>
-
-<div class="row">
-    <!-- 左側: 植物リスト -->
-    <div class="col-md-4">
-        <div class="card">
-            <div class="card-header d-flex justify-content-between">
-                <span>Registered Plants</span>
-                <button id="add-plant-btn" class="btn btn-primary btn-sm py-0"><i class="bi bi-plus"></i> New</button>
-            </div>
-            <div id="plant-list" class="list-group list-group-flush"></div>
-        </div>
+<div id="plants-page">
+    <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+        <h1 class="h2">Plant Library</h1>
     </div>
 
-    <!-- 右側: エディタ/ビューア -->
-    <div class="col-md-8">
-        <div id="plant-editor-area" class="card" style="display: none;">
-            <div class="card-header"><h5 class="mb-0" id="editor-title">New Plant</h5></div>
-            <div class="card-body">
-                <form id="plant-form">
-                    <input type="hidden" id="plant-id">
-                    <div class="row align-items-end">
-                        <div class="col-md-3"><label class="form-label">Genus</label><input type="text" id="genus" class="form-control"></div>
-                        <div class="col-md-3"><label class="form-label">Species</label><input type="text" id="species" class="form-control"></div>
-                        <div class="col-md-3"><label class="form-label">Variety</label><input type="text" id="variety" class="form-control"></div>
-                        <div class="col-md-3"><button type="button" id="ai-lookup-btn" class="btn btn-info w-100"><i class="bi bi-robot"></i> Search with AI</button></div>
-                    </div>
-                    <hr>
-                    <div class="text-center mb-3">
-                        <img id="plant-image" src="https://placehold.co/600x300/eee/ccc?text=Plant+Image" class="img-fluid rounded" style="max-height: 200px; cursor: pointer;" title="Click to upload a custom image">
-                        <input type="file" id="plant-image-upload" accept="image/*" class="d-none">
-                        <input type="text" id="image-url" class="form-control form-control-sm mt-2" placeholder="Image URL (or click image to upload)">
-                    </div>
-                    <div class="row"><div class="col-md-6 mb-3"><label class="form-label">Origin Country</label><input type="text" id="origin-country" class="form-control"></div><div class="col-md-6 mb-3"><label class="form-label">Origin Region</label><input type="text" id="origin-region" class="form-control"></div></div>
-                    
-                    <!-- ▼▼▼ 地図表示エリアを追加 ▼▼▼ -->
-                    <div id="map-container" class="mb-3 rounded" style="height: 250px; background-color: #f8f9fa; border: 1px solid #dee2e6;">
-                        <div class="d-flex justify-content-center align-items-center h-100 text-muted">
-                            Enter Origin to see map
+    <div class="row">
+        <!-- 左側: 植物リスト -->
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between">
+                    <span>Registered Plants</span>
+                    <button id="add-plant-btn" class="btn btn-primary btn-sm py-0"><i class="bi bi-plus"></i> New</button>
+                </div>
+                <div id="plant-list" class="list-group list-group-flush">
+                    <!-- サーバーから渡されたリストをここで表示 -->
+                    {% for plant in plants %}
+                    <a href="#" class="list-group-item list-group-item-action" data-plant-id="{{ plant.plant_id }}">
+                        <strong>{{ plant.variety or plant.species }}</strong><br>
+                        <small class="text-muted">{{ plant.genus }}</small>
+                    </a>
+                    {% else %}
+                    <div class="list-group-item">No plants yet. Click 'New' to add one.</div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <!-- 右側: エディタ/ビューア -->
+        <div class="col-md-8">
+            <div id="plant-editor-area" class="card" style="display: none;">
+                <div class="card-header">
+                    <h5 class="mb-0" id="editor-title">New Plant</h5>
+                </div>
+                <div class="card-body">
+                    <form id="plant-form" enctype="multipart/form-data">
+                        <input type="hidden" id="plant-id" name="plant_id">
+                        <!-- 基本情報 -->
+                        <div class="row align-items-end">
+                            <div class="col-md-3"><label class="form-label">Genus</label><input type="text" id="genus" name="genus" class="form-control"></div>
+                            <div class="col-md-3"><label class="form-label">Species</label><input type="text" id="species" name="species" class="form-control"></div>
+                            <div class="col-md-3"><label class="form-label">Variety</label><input type="text" id="variety" name="variety" class="form-control"></div>
+                            <div class="col-md-3"><button type="button" id="ai-lookup-btn" class="btn btn-info w-100"><i class="bi bi-robot"></i> Search with AI</button></div>
                         </div>
-                    </div>
-                    
-                    <h6><i class="bi bi-calendar-month"></i> Monthly Climate in Origin (°C)</h6>
-                    <div class="table-responsive mb-3">
-                        <table class="table table-sm table-bordered">
-                            <thead class="table-light"><tr><th>Month</th><th>Avg</th><th>High</th><th>Low</th></tr></thead>
-                            <tbody id="monthly-temps-tbody"></tbody>
-                        </table>
-                    </div>
-                    
-                    <h6><i class="bi bi-thermometer-sun"></i> Growth Periods (°C)</h6>
-                    <div class="row">
-                        <div class="col-md-6 mb-3"><label class="form-label">Fast Growth (High/Low)</label><div class="input-group"><input type="number" id="growing-fast-temp-high" class="form-control" placeholder="High"><input type="number" id="growing-fast-temp-low" class="form-control" placeholder="Low"></div></div>
-                        <div class="col-md-6 mb-3"><label class="form-label">Slow Growth (High/Low)</label><div class="input-group"><input type="number" id="growing-slow-temp-high" class="form-control" placeholder="High"><input type="number" id="growing-slow-temp-low" class="form-control" placeholder="Low"></div></div>
-                    </div>
-                    <h6><i class="bi bi-snow2"></i> Dormancy Periods (°C)</h6>
-                    <div class="row">
-                        <div class="col-md-6 mb-3"><label class="form-label">Hot Dormancy (High/Low)</label><div class="input-group"><input type="number" id="hot-dormancy-temp-high" class="form-control" placeholder="High"><input type="number" id="hot-dormancy-temp-low" class="form-control" placeholder="Low"></div></div>
-                        <div class="col-md-6 mb-3"><label class="form-label">Cold Dormancy (High/Low)</label><div class="input-group"><input type="number" id="cold-dormancy-temp-high" class="form-control" placeholder="High"><input type="number" id="cold-dormancy-temp-low" class="form-control" placeholder="Low"></div></div>
-                    </div>
-                    <hr>
-                    
-                    <h6><i class="bi bi-exclamation-triangle-fill text-danger"></i> Survival Temperature Limits (°C)</h6>
-                    <div class="row">
-                        <div class="col-md-6 mb-3"><label class="form-label">Lethal High Temp</label><input type="number" id="lethal-temp-high" class="form-control"></div>
-                        <div class="col-md-6 mb-3"><label class="form-label">Lethal Low Temp</label><input type="number" id="lethal-temp-low" class="form-control"></div>
-                    </div>
-                    <hr>
+                        <hr>
+                        <!-- 画像セクション -->
+                        <h6><i class="bi bi-image"></i> Plant Image</h6>
+                        <div class="text-center mb-3">
+                            <img id="plant-image-preview" src="https://placehold.co/600x300/eee/ccc?text=Plant+Image" class="img-fluid rounded" style="max-height: 200px;">
+                        </div>
+                        <div class="mb-3">
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="radio" name="image-source" id="image-source-url" value="url" checked>
+                                <label class="form-check-label" for="image-source-url">Web URL</label>
+                            </div>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="radio" name="image-source" id="image-source-upload" value="upload">
+                                <label class="form-check-label" for="image-source-upload">Upload from PC</label>
+                            </div>
+                        </div>
+                        <div id="image-url-group" class="mb-3">
+                            <input type="text" id="image-url" name="image_url" class="form-control form-control-sm" placeholder="Image URL (e.g., https://example.com/image.jpg)">
+                        </div>
+                        <div id="image-upload-group" class="mb-3" style="display: none;">
+                            <input type="file" id="plant-image-upload" name="plant-image-upload" class="form-control form-control-sm" accept="image/png, image/jpeg, image/gif">
+                        </div>
+                        
+                        <!-- 詳細情報 -->
+                        <div class="row">
+                            <div class="col-md-6 mb-3"><label class="form-label">Origin Country</label><input type="text" id="origin-country" name="origin_country" class="form-control"></div>
+                            <div class="col-md-6 mb-3"><label class="form-label">Origin Region</label><input type="text" id="origin-region" name="origin_region" class="form-control"></div>
+                        </div>
+                        
+                        <!-- 月間気候テーブルのコンテナ -->
+                        <h6><i class="bi bi-calendar-month"></i> Monthly Climate in Origin (°C)</h6>
+                        <div class="table-responsive mb-3">
+                            <table class="table table-sm table-bordered text-center">
+                                <thead class="table-light"><tr><th>Month</th><th>Avg</th><th>High</th><th>Low</th></tr></thead>
+                                <tbody id="monthly-temps-tbody">
+                                    <!-- JavaScriptによって動的に生成されます -->
+                                </tbody>
+                            </table>
+                        </div>
 
-                    <h6><i class="bi bi-droplet-fill"></i> Watering Conditions</h6>
-                    <div class="row">
-                        <div class="col-md-6 mb-3"><label class="form-label">Growing (Fast)</label><input type="text" id="watering-growing" class="form-control"></div>
-                        <div class="col-md-6 mb-3"><label class="form-label">Growing (Slow)</label><input type="text" id="watering-slow-growing" class="form-control"></div>
-                        <div class="col-md-6 mb-3"><label class="form-label">Hot Dormancy</label><input type="text" id="watering-hot-dormancy" class="form-control"></div>
-                        <div class="col-md-6 mb-3"><label class="form-label">Cold Dormancy</label><input type="text" id="watering-cold-dormancy" class="form-control"></div>
-                    </div>
-                </form>
+                        <h6><i class="bi bi-thermometer-sun"></i> Growth Periods (°C)</h6>
+                        <div class="row">
+                            <div class="col-md-6 mb-3"><label class="form-label">Fast Growth (High/Low)</label><div class="input-group"><input type="number" id="growing-fast-temp-high" name="growing_fast_temp_high" class="form-control" placeholder="High"><input type="number" id="growing-fast-temp-low" name="growing_fast_temp_low" class="form-control" placeholder="Low"></div></div>
+                            <div class="col-md-6 mb-3"><label class="form-label">Slow Growth (High/Low)</label><div class="input-group"><input type="number" id="growing-slow-temp-high" name="growing_slow_temp_high" class="form-control" placeholder="High"><input type="number" id="growing-slow-temp-low" name="growing_slow_temp_low" class="form-control" placeholder="Low"></div></div>
+                        </div>
+                        <h6><i class="bi bi-snow2"></i> Dormancy Periods (°C)</h6>
+                        <div class="row">
+                            <div class="col-md-6 mb-3"><label class="form-label">Hot Dormancy (High/Low)</label><div class="input-group"><input type="number" id="hot-dormancy-temp-high" name="hot_dormancy_temp_high" class="form-control" placeholder="High"><input type="number" id="hot-dormancy-temp-low" name="hot_dormancy_temp_low" class="form-control" placeholder="Low"></div></div>
+                            <div class="col-md-6 mb-3"><label class="form-label">Cold Dormancy (High/Low)</label><div class="input-group"><input type="number" id="cold-dormancy-temp-high" name="cold_dormancy_temp_high" class="form-control" placeholder="High"><input type="number" id="cold-dormancy-temp-low" name="cold_dormancy_temp_low" class="form-control" placeholder="Low"></div></div>
+                        </div>
+                        <hr>
+                        
+                        <h6><i class="bi bi-exclamation-triangle-fill text-danger"></i> Survival Temperature Limits (°C)</h6>
+                        <div class="row">
+                            <div class="col-md-6 mb-3"><label class="form-label">Lethal High Temp</label><input type="number" id="lethal-temp-high" name="lethal_temp_high" class="form-control"></div>
+                            <div class="col-md-6 mb-3"><label class="form-label">Lethal Low Temp</label><input type="number" id="lethal-temp-low" name="lethal_temp_low" class="form-control"></div>
+                        </div>
+                        <hr>
+
+                        <h6><i class="bi bi-droplet-fill"></i> Watering Conditions</h6>
+                        <div class="row">
+                            <div class="col-md-6 mb-3"><label class="form-label">Growing (Fast)</label><input type="text" id="watering-growing" name="watering_growing" class="form-control"></div>
+                            <div class="col-md-6 mb-3"><label class="form-label">Growing (Slow)</label><input type="text" id="watering-slow-growing" name="watering_slow_growing" class="form-control"></div>
+                            <div class="col-md-6 mb-3"><label class="form-label">Hot Dormancy</label><input type="text" id="watering-hot-dormancy" name="watering_hot_dormancy" class="form-control"></div>
+                            <div class="col-md-6 mb-3"><label class="form-label">Cold Dormancy</label><input type="text" id="watering-cold-dormancy" name="watering_cold_dormancy" class="form-control"></div>
+                        </div>
+
+                    </form>
+                </div>
+                <div class="card-footer text-end">
+                    <button class="btn btn-primary" id="save-plant-btn">Save Plant Info</button>
+                </div>
             </div>
-            <div class="card-footer text-end">
-                <button class="btn btn-primary" id="save-plant-btn">Save Plant Info</button>
+            <div id="plant-editor-placeholder" class="text-center text-muted pt-5">
+                <p><i class="bi bi-arrow-left-circle fs-1"></i></p>
+                <h4>Select a plant or add a new one</h4>
             </div>
-        </div>
-        <div id="plant-editor-placeholder" class="text-center text-muted pt-5">
-            <p><i class="bi bi-arrow-left-circle fs-1"></i></p>
-            <h4>Select a plant or add a new one</h4>
         </div>
     </div>
 </div>
+
+<!-- ▼▼▼ サーバーから渡されたJSONデータを安全に埋め込むための修正 ▼▼▼ -->
+<script id="server-data" type="application/json">
+    {{ plants_json | safe }}
+</script>
 {% endblock %}
+
