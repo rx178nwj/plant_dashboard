@@ -32,3 +32,13 @@ body {
 .status-icon .bi-exclamation-triangle-fill { color: #ffc107; }
 .status-icon .bi-question-circle { color: #6c757d; }
 
+/* Plant Card Specific Styles */
+.plant-card .img-fluid {
+    object-fit: cover;
+}
+
+.analysis-section .badge {
+    font-size: 0.8rem;
+    padding: 0.4em 0.7em;
+}
+

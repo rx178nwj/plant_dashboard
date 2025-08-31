@@ -13,33 +13,81 @@
         </div>
     </div>
 
-    <!-- デバイスカード -->
-    <div id="device-cards-container" class="row">
-        {% for device in devices %}
-        <div class="col-xl-3 col-lg-4 col-md-6 mb-4">
-            <div id="device-card-{{ device.device_id }}" class="card h-100 shadow-sm device-card status-{{ device.connection_status | default('initializing') }}">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0">{{ device.device_name }}</h5>
-                    <span id="status-icon-{{ device.device_id }}" class="status-icon"><i class="bi bi-question-circle"></i></span>
-                </div>
-                <div class="card-body">
-                    <div class="row text-center">
-                        <div class="col-6 mb-2"><i class="bi bi-thermometer-half text-danger"></i> <span id="temp-{{ device.device_id }}" class="fs-5 fw-bold">{{ device.last_data.get('temperature') | round(1) if device.last_data.get('temperature') is not none else '--' }}</span> °C</div>
-                        <div class="col-6 mb-2"><i class="bi bi-droplet-half text-primary"></i> <span id="humidity-{{ device.device_id }}" class="fs-5 fw-bold">{{ device.last_data.get('humidity') | round(1) if device.last_data.get('humidity') is not none else '--' }}</span> %</div>
-                        <div class="col-6"><i class="bi bi-brightness-high text-warning"></i> <span id="light-{{ device.device_id }}" class="fs-5 fw-bold">{{ device.last_data.get('light_lux') | round(1) if device.last_data.get('light_lux') is not none else '--' }}</span> lx</div>
-                        <div class="col-6"><i class="bi bi-moisture text-success"></i> <span id="soil-{{ device.device_id }}" class="fs-5 fw-bold">{{ device.last_data.get('soil_moisture') | default('--') }}</span></div>
+    <!-- ▼▼▼ 植物中心のカード表示エリア ▼▼▼ -->
+    <h2 class="h3">Managed Plants Status</h2>
+    <div id="plant-cards-container" class="row">
+        {% for plant in plants_data %}
+        {% set sensor_data = plant.sensors.get('primary', {}) %}
+        <div class="col-xl-4 col-md-6 mb-4">
+            <div id="plant-card-{{ plant.managed_plant_id }}" class="card h-100 shadow-sm plant-card">
+                <div class="row g-0 h-100">
+                    <div class="col-4">
+                        <img src="{{ plant.image_url or 'https://placehold.co/400x600/eeeeee/cccccc?text=No+Image' }}" 
+                             onerror="this.onerror=null;this.src='https://placehold.co/400x600/eeeeee/cccccc?text=No+Image';"
+                             class="img-fluid rounded-start h-100 w-100" 
+                             alt="{{ plant.plant_name }}">
                     </div>
-                </div>
-                <div class="card-footer d-flex justify-content-between align-items-center text-muted small">
-                    <div><i class="bi bi-battery-half"></i> <span id="battery-{{ device.device_id }}">{{ device.battery_level | default('--') }}</span>%</div>
-                    <div id="timestamp-{{ device.device_id }}"><i class="bi bi-clock"></i> {{ device.last_data.get('timestamp').split(' ')[1] if device.last_data.get('timestamp') else 'No data' }}</div>
+                    <div class="col-8 d-flex flex-column">
+                        <div class="card-header bg-white border-bottom-0">
+                            <h5 class="card-title mb-0" style="font-size: 1.1rem;">{{ plant.plant_name }}</h5>
+                            <small class="text-muted">{{ plant.genus }} {{ plant.species }}</small>
+                        </div>
+                        <div class="card-body py-2">
+                            <h6 class="card-subtitle mb-2 text-muted small"><i class="bi bi-hdd-stack"></i> Sensor Readings</h6>
+                            <div class="row text-center sensor-data-grid">
+                                <div class="col-6 mb-2">
+                                    <i class="bi bi-thermometer-half text-danger"></i>
+                                    <span id="temp-{{ plant.managed_plant_id }}" class="fs-6 fw-bold">
+                                        {{ sensor_data.temperature | round(1) if sensor_data and 'temperature' in sensor_data and sensor_data.temperature is not none else '--' }}
+                                    </span> °C
+                                </div>
+                                <div class="col-6 mb-2">
+                                    <i class="bi bi-droplet-half text-primary"></i> 
+                                    <span id="humidity-{{ plant.managed_plant_id }}" class="fs-6 fw-bold">
+                                        {{ sensor_data.humidity | round(1) if sensor_data and 'humidity' in sensor_data and sensor_data.humidity is not none else '--' }}
+                                    </span> %
+                                </div>
+                                <div class="col-6">
+                                    <i class="bi bi-brightness-high text-warning"></i> 
+                                    <span id="light-{{ plant.managed_plant_id }}" class="fs-6 fw-bold">
+                                        {{ sensor_data.light_lux | round(1) if sensor_data and 'light_lux' in sensor_data and sensor_data.light_lux is not none else '--' }}
+                                    </span> lx
+                                </div>
+                                <div class="col-6">
+                                    <i class="bi bi-moisture text-success"></i> 
+                                    <span id="soil-{{ plant.managed_plant_id }}" class="fs-6 fw-bold">
+                                        {{ sensor_data.soil_moisture if sensor_data and 'soil_moisture' in sensor_data and sensor_data.soil_moisture is not none else '--' }}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="card-footer bg-white mt-auto">
+                            <h6 class="card-subtitle mb-2 text-muted small"><i class="bi bi-clipboard-data"></i> Latest Analysis</h6>
+                            <div id="analysis-{{ plant.managed_plant_id }}" class="analysis-section">
+                                <span class="badge bg-light text-dark me-2">
+                                    <i class="bi bi-sun"></i> Growth: 
+                                    <strong id="growth-{{ plant.managed_plant_id }}">{{ plant.analysis.growth_period | replace('_', ' ') | title | default('Unknown') }}</strong>
+                                </span>
+                                <span class="badge {% if plant.analysis.watering_advice and 'needed' in plant.analysis.watering_advice|lower %}bg-primary text-white{% else %}bg-light text-dark{% endif %}">
+                                    <i class="bi bi-water"></i> Advice: 
+                                    <strong id="watering-{{ plant.managed_plant_id }}">{{ plant.analysis.watering_advice | default('N/A') }}</strong>
+                                </span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
         {% else %}
-            <div class="col"><div class="alert alert-info">No devices found.</div></div>
+            <div class="col">
+                <div class="alert alert-light text-center">
+                    <p class="fs-4"><i class="bi bi-info-circle"></i> No managed plants found.</p>
+                    <p>Go to the <a href="{{ url_for('management.management') }}" class="alert-link">Management</a> page to add a plant.</p>
+                </div>
+            </div>
         {% endfor %}
     </div>
+    <!-- ▲▲▲ 植物中心のカード表示エリア ▲▲▲ -->
 
     <hr class="my-4">
 

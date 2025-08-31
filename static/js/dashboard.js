@@ -33,35 +33,9 @@ function initializeDashboard() {
     if (isToday) {
         const eventSource = new EventSource("/stream");
         eventSource.onmessage = function(event) {
-            const devices = JSON.parse(event.data);
-            updateDeviceCards(devices);
+            const plants = JSON.parse(event.data);
+            updatePlantCards(plants);
         };
-    }
-}
-
-/**
- * タイムスタンプ文字列を見やすい形式にフォーマットする
- * @param {string} timestampStr - "YYYY-MM-DD HH:MM:SS" 形式のタイムスタンプ
- * @returns {string} フォーマットされた時間文字列
- */
-function formatTimestamp(timestampStr) {
-    if (!timestampStr) return 'No data';
-    try {
-        const date = new Date(timestampStr.replace(' ', 'T'));
-        const now = new Date();
-
-        const isToday = date.getFullYear() === now.getFullYear() &&
-                        date.getMonth() === now.getMonth() &&
-                        date.getDate() === now.getDate();
-
-        if (isToday) {
-            return date.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
-        } else {
-            return `${date.getMonth() + 1}/${date.getDate()} ${date.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}`;
-        }
-    } catch (e) {
-        console.error("Error formatting timestamp:", e);
-        return timestampStr.split(' ')[1] || timestampStr;
     }
 }
 
@@ -141,51 +115,43 @@ async function updateHistoryChart(deviceId, period, chartInstances, selectedDate
     }
 }
 
-function updateDeviceCards(devices) {
-    devices.forEach(device => {
-        const lastData = device.last_data || {};
-        updateElementText(`temp-${device.device_id}`, lastData.temperature?.toFixed(1) || '--');
-        updateElementText(`humidity-${device.device_id}`, lastData.humidity?.toFixed(1) || '--');
-        updateElementText(`light-${device.device_id}`, lastData.light_lux?.toFixed(1) || '--');
-        updateElementText(`soil-${device.device_id}`, lastData.soil_moisture || '--');
-        updateElementText(`battery-${device.device_id}`, device.battery_level || '--');
-        updateStatusVisuals(device.device_id, device.connection_status);
+function updatePlantCards(plants) {
+    plants.forEach(plant => {
+        const plantId = plant.managed_plant_id;
+        const sensorData = plant.sensors?.primary || {};
+        const analysis = plant.analysis || {};
 
-        // タイムスタンプ要素をHTMLで更新
-        const timestampEl = document.getElementById(`timestamp-${device.device_id}`);
-        if (timestampEl) {
-            const timestampText = formatTimestamp(lastData.timestamp);
-            const newHtml = `<i class="bi bi-clock"></i> ${timestampText}`;
-            // コンテンツが変更された場合のみDOMを更新
-            if (timestampEl.innerHTML !== newHtml) {
-                timestampEl.innerHTML = newHtml;
+        // Update sensor values
+        updateElementText(`temp-${plantId}`, sensorData.temperature?.toFixed(1) || '--');
+        updateElementText(`humidity-${plantId}`, sensorData.humidity?.toFixed(1) || '--');
+        updateElementText(`light-${plantId}`, sensorData.light_lux?.toFixed(1) || '--');
+        updateElementText(`soil-${plantId}`, sensorData.soil_moisture || '--');
+
+        // Update analysis text
+        const growthText = (analysis.growth_period || 'Unknown').replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+        updateElementText(`growth-${plantId}`, growthText);
+        updateElementText(`watering-${plantId}`, analysis.watering_advice || 'N/A');
+        
+        // Update watering advice visual cue
+        const wateringAdviceEl = document.getElementById(`watering-${plantId}`);
+        if (wateringAdviceEl) {
+            const parentBadge = wateringAdviceEl.closest('.badge');
+            if (parentBadge) {
+                parentBadge.classList.remove('bg-primary', 'text-white', 'bg-light', 'text-dark');
+                if (analysis.watering_advice && analysis.watering_advice.toLowerCase().includes('needed')) {
+                    parentBadge.classList.add('bg-primary', 'text-white');
+                } else {
+                     parentBadge.classList.add('bg-light', 'text-dark');
+                }
             }
         }
     });
 }
 
+
 function updateElementText(id, text) {
     const element = document.getElementById(id);
-    if (element && element.textContent !== text) {
+    if (element && element.textContent.trim() !== String(text).trim()) {
         element.textContent = text;
     }
 }
-
-function updateStatusVisuals(deviceId, status) {
-    const card = document.getElementById(`device-card-${deviceId}`);
-    const iconElement = document.getElementById(`status-icon-${deviceId}`);
-    if (!card || !iconElement) return;
-
-    card.className = card.className.replace(/\bstatus-\S+/g, '');
-    card.classList.add(`status-${status}`);
-
-    let iconHtml = '<i class="bi bi-question-circle"></i>';
-    switch (status) {
-        case 'connected': case 'historical': iconHtml = '<i class="bi bi-check-circle-fill"></i>'; break;
-        case 'disconnected': iconHtml = '<i class="bi bi-x-circle-fill"></i>'; break;
-        case 'error': iconHtml = '<i class="bi bi-exclamation-triangle-fill"></i>'; break;
-        case 'no_data': iconHtml = '<i class="bi bi-archive-fill"></i>'; break;
-    }
-    iconElement.innerHTML = iconHtml;
-}
-

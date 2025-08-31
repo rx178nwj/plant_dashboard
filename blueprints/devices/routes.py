@@ -5,7 +5,7 @@ import device_manager as dm
 from ble_manager import scan_devices as ble_scan
 from blueprints.dashboard.routes import requires_auth
 
-devices_bp = Blueprint('devices', __name__, template_folder='../../templates', static_folder='../../static')
+devices_bp = Blueprint('devices', __name__, template_folder='../../templates')
 
 @devices_bp.route('/devices')
 @requires_auth

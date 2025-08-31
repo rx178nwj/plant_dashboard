@@ -4,7 +4,7 @@ import device_manager as dm
 import uuid
 from blueprints.dashboard.routes import requires_auth
 
-management_bp = Blueprint('management', __name__, template_folder='../../templates', static_folder='../../static')
+management_bp = Blueprint('management', __name__, template_folder='../../templates')
 
 @management_bp.route('/management')
 @requires_auth

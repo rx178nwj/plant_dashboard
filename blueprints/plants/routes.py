@@ -9,7 +9,7 @@ from lib.gemini_client import lookup_plant_info
 from blueprints.dashboard.routes import requires_auth
 import asyncio # AI検索のためにインポート
 
-plants_bp = Blueprint('plants', __name__, template_folder='../../templates', static_folder='../../static')
+plants_bp = Blueprint('plants', __name__, template_folder='../../templates')
 
 @plants_bp.route('/plants')
 @requires_auth
