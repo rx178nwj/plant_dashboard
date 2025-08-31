@@ -9,7 +9,6 @@
     </div>
 
     <div class="row">
-        <!-- 左側: 植物リスト -->
         <div class="col-md-4">
             <div class="card">
                 <div class="card-header d-flex justify-content-between">
@@ -17,7 +16,6 @@
                     <button id="add-plant-btn" class="btn btn-primary btn-sm py-0"><i class="bi bi-plus"></i> New</button>
                 </div>
                 <div id="plant-list" class="list-group list-group-flush">
-                    <!-- サーバーから渡されたリストをここで表示 -->
                     {% for plant in plants %}
                     <a href="#" class="list-group-item list-group-item-action" data-plant-id="{{ plant.plant_id }}">
                         <strong>{{ plant.variety or plant.species }}</strong><br>
@@ -30,7 +28,6 @@
             </div>
         </div>
 
-        <!-- 右側: エディタ/ビューア -->
         <div class="col-md-8">
             <div id="plant-editor-area" class="card" style="display: none;">
                 <div class="card-header">
@@ -39,7 +36,6 @@
                 <div class="card-body">
                     <form id="plant-form" enctype="multipart/form-data">
                         <input type="hidden" id="plant-id" name="plant_id">
-                        <!-- 基本情報 -->
                         <div class="row align-items-end">
                             <div class="col-md-3"><label class="form-label">Genus</label><input type="text" id="genus" name="genus" class="form-control"></div>
                             <div class="col-md-3"><label class="form-label">Species</label><input type="text" id="species" name="species" class="form-control"></div>
@@ -47,7 +43,6 @@
                             <div class="col-md-3"><button type="button" id="ai-lookup-btn" class="btn btn-info w-100"><i class="bi bi-robot"></i> Search with AI</button></div>
                         </div>
                         <hr>
-                        <!-- 画像セクション -->
                         <h6><i class="bi bi-image"></i> Plant Image</h6>
                         <div class="text-center mb-3">
                             <img id="plant-image-preview" src="https://placehold.co/600x300/eee/ccc?text=Plant+Image" class="img-fluid rounded" style="max-height: 200px;">
@@ -69,20 +64,17 @@
                             <input type="file" id="plant-image-upload" name="plant-image-upload" class="form-control form-control-sm" accept="image/png, image/jpeg, image/gif">
                         </div>
                         
-                        <!-- 詳細情報 -->
                         <div class="row">
                             <div class="col-md-6 mb-3"><label class="form-label">Origin Country</label><input type="text" id="origin-country" name="origin_country" class="form-control"></div>
                             <div class="col-md-6 mb-3"><label class="form-label">Origin Region</label><input type="text" id="origin-region" name="origin_region" class="form-control"></div>
                         </div>
                         
-                        <!-- 月間気候テーブルのコンテナ -->
                         <h6><i class="bi bi-calendar-month"></i> Monthly Climate in Origin (°C)</h6>
                         <div class="table-responsive mb-3">
                             <table class="table table-sm table-bordered text-center">
                                 <thead class="table-light"><tr><th>Month</th><th>Avg</th><th>High</th><th>Low</th></tr></thead>
                                 <tbody id="monthly-temps-tbody">
-                                    <!-- JavaScriptによって動的に生成されます -->
-                                </tbody>
+                                    </tbody>
                             </table>
                         </div>
 
@@ -115,7 +107,8 @@
 
                     </form>
                 </div>
-                <div class="card-footer text-end">
+                <div class="card-footer d-flex justify-content-between">
+                    <button class="btn btn-danger" id="delete-plant-btn">Delete</button>
                     <button class="btn btn-primary" id="save-plant-btn">Save Plant Info</button>
                 </div>
             </div>
@@ -127,9 +120,7 @@
     </div>
 </div>
 
-<!-- ▼▼▼ サーバーから渡されたJSONデータを安全に埋め込むための修正 ▼▼▼ -->
 <script id="server-data" type="application/json">
     {{ plants_json | safe }}
 </script>
 {% endblock %}
-

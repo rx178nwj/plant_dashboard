@@ -9,7 +9,6 @@
     </div>
 
     <div class="row">
-        <!-- 左側: 管理植物リスト -->
         <div class="col-md-4">
             <div class="card">
                 <div class="card-header d-flex justify-content-between">
@@ -28,7 +27,6 @@
             </div>
         </div>
 
-        <!-- 右側: 設定エリア -->
         <div class="col-md-8">
             <div id="editor-area" class="card" style="display: none;">
                 <div class="card-header"><h5 class="mb-0" id="editor-title"></h5></div>
@@ -79,7 +77,8 @@
                         <div id="live-data-display" class="card bg-light" style="display: none;"></div>
                     </form>
                 </div>
-                <div class="card-footer text-end">
+                <div class="card-footer d-flex justify-content-between">
+                    <button class="btn btn-danger" id="delete-managed-plant-btn">Delete</button>
                     <button class="btn btn-primary" id="save-managed-plant-btn">Save Changes</button>
                 </div>
             </div>
@@ -91,4 +90,3 @@
     </div>
 </div>
 {% endblock %}
-

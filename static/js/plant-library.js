@@ -8,6 +8,7 @@ function initializePlantLibrary() {
     const addPlantBtn = document.getElementById('add-plant-btn');
     const aiLookupBtn = document.getElementById('ai-lookup-btn');
     const savePlantBtn = document.getElementById('save-plant-btn');
+    const deletePlantBtn = document.getElementById('delete-plant-btn');
     const plantList = document.getElementById('plant-list');
     const editorArea = document.getElementById('plant-editor-area');
     const placeholder = document.getElementById('plant-editor-placeholder');
@@ -186,6 +187,33 @@ function initializePlantLibrary() {
             savePlantBtn.innerHTML = 'Save Plant Info';
         }
     });
+
+    // 「Delete」ボタン
+    deletePlantBtn.addEventListener('click', async () => {
+        const plantId = document.getElementById('plant-id').value;
+        if (!plantId) return;
+
+        if (confirm('Are you sure you want to delete this plant from the library? This action cannot be undone.')) {
+            deletePlantBtn.disabled = true;
+            deletePlantBtn.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Deleting...`;
+            try {
+                const response = await fetch(`/api/plants/${plantId}`, {
+                    method: 'DELETE',
+                });
+                const result = await response.json();
+                if (!response.ok || !result.success) {
+                    throw new Error(result.message || 'Failed to delete plant.');
+                }
+                showAlert('success', 'Plant deleted successfully! Page will reload.', 'main-alert-box');
+                setTimeout(() => window.location.reload(), 2000);
+            } catch (error) {
+                showAlert('danger', `Error: ${error.message}`, 'main-alert-box');
+            } finally {
+                deletePlantBtn.disabled = false;
+                deletePlantBtn.innerHTML = 'Delete';
+            }
+        }
+    });
     
     // AI検索ボタン
     aiLookupBtn.addEventListener('click', async () => {
@@ -243,4 +271,3 @@ function initializePlantLibrary() {
         }
     });
 }
-

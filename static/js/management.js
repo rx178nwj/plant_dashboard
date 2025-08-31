@@ -3,6 +3,7 @@
 function initializeManagementDashboard() {
     const addPlantBtn = document.getElementById('add-managed-plant-btn');
     const savePlantBtn = document.getElementById('save-managed-plant-btn');
+    const deletePlantBtn = document.getElementById('delete-managed-plant-btn');
     const plantList = document.getElementById('managed-plant-list');
     const editorArea = document.getElementById('editor-area');
     const placeholder = document.getElementById('editor-placeholder');
@@ -73,6 +74,32 @@ function initializeManagementDashboard() {
         } finally {
             savePlantBtn.disabled = false;
             savePlantBtn.innerHTML = 'Save Changes';
+        }
+    });
+
+    deletePlantBtn.addEventListener('click', async () => {
+        const managedPlantId = document.getElementById('managed-plant-id').value;
+        if (!managedPlantId) return;
+
+        if (confirm('Are you sure you want to delete this plant?')) {
+            deletePlantBtn.disabled = true;
+            deletePlantBtn.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Deleting...`;
+            try {
+                const response = await fetch(`/api/managed-plants/${managedPlantId}`, {
+                    method: 'DELETE',
+                });
+                const result = await response.json();
+                if (!response.ok || !result.success) { throw new Error('Failed to delete plant.'); }
+                loadManagedPlants();
+                showAlert('success', 'Managed plant deleted successfully.', 'main-alert-box');
+                editorArea.style.display = 'none';
+                placeholder.style.display = 'block';
+            } catch (error) {
+                showAlert('danger', `Error deleting plant: ${error.message}`, 'main-alert-box');
+            } finally {
+                deletePlantBtn.disabled = false;
+                deletePlantBtn.innerHTML = 'Delete';
+            }
         }
     });
 

@@ -139,3 +139,15 @@ def api_plants():
         results.append(plant_dict)
     return jsonify(results)
 
+@plants_bp.route('/api/plants/<plant_id>', methods=['DELETE'])
+@requires_auth
+def delete_plant(plant_id):
+    """植物ライブラリから植物を削除します。"""
+    try:
+        conn = dm.get_db_connection()
+        conn.execute("DELETE FROM plants WHERE plant_id = ?", (plant_id,))
+        conn.commit()
+        conn.close()
+        return jsonify({'success': True, 'message': 'Plant deleted successfully.'})
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500

@@ -61,3 +61,16 @@ def api_managed_plants():
     plants_list = conn.execute("SELECT * FROM managed_plants").fetchall()
     conn.close()
     return jsonify([dict(row) for row in plants_list])
+
+@management_bp.route('/api/managed-plants/<managed_plant_id>', methods=['DELETE'])
+@requires_auth
+def api_delete_managed_plant(managed_plant_id):
+    """管理対象の植物を削除します。"""
+    try:
+        conn = dm.get_db_connection()
+        conn.execute("DELETE FROM managed_plants WHERE managed_plant_id = ?", (managed_plant_id,))
+        conn.commit()
+        conn.close()
+        return jsonify({'success': True, 'message': 'Plant deleted successfully.'})
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
