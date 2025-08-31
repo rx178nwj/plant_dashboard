@@ -1,0 +1,25 @@
+# /etc/systemd/system/plant_dashboard-daemon.service
+[Unit]
+Description=Plant Dashboard Bluetooth Daemon
+After=network.target
+
+[Service]
+User=pi
+Group=pi
+
+# 新しく作成したbluetooth_daemon.pyを仮想環境のPythonで実行
+ExecStart=/home/pi/plant_dashboard/.venv/bin/python /home/pi/plant_dashboard/bluetooth_daemon.py
+
+#作業ディレクトリ
+WorkingDirectory=/home/pi/plant_dashboard
+
+#エラー発生時に自動で再起動する
+Restart=always
+RestartSec=10
+
+#標準出力と標準エラー出力をシステムログ(journald)に送る
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
