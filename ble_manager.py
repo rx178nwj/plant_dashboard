@@ -127,14 +127,8 @@ class PlantDeviceBLE:
                 logger.error(f"[{self.device_id}] Payload length mismatch. Header says {data_len}, but got {len(payload)}")
                 return None
 
-            # ▼▼▼ここからがメインの修正点▼▼▼
+            # C言語の `struct tm` (9つのint) + 4つのfloat + 1つのbool + 3バイトのパディングに合わせてデータを展開
             if data_len == 56:
-                # C言語の `struct tm` (9つのint) + 4つのfloat + 1つのbool + 3バイトのパディングに合わせたフォーマット
-                # '<' : リトルエンディアン
-                # '9i': 9つの符号付き整数 (tm_secからtm_isdstまで)
-                # '4f': 4つの浮動小数点数 (lux, temp, humidity, soil)
-                # '?':  1つのブール値 (sensor_error)
-                # '3x': 3バイトのパディングを無視
                 unpacked_data = struct.unpack('<9i4f?3x', payload)
                 
                 tm_sec, tm_min, tm_hour, tm_mday, tm_mon, tm_year, tm_wday, tm_yday, tm_isdst, \
@@ -148,7 +142,6 @@ class PlantDeviceBLE:
             else:
                 logger.error(f"[{self.device_id}] Unsupported data length in payload: {data_len}.")
                 return None
-            # ▲▲▲ここまでがメインの修正点▲▲▲
 
             sensor_data = {
                 'datetime': dt_str, 'light_lux': lux, 'temperature': temp,
@@ -181,8 +174,6 @@ class PlantDeviceBLE:
             except Exception as e:
                 logger.warning(f"[{self.device_id}] Failed to stop notifications: {e}")
 
-
-# (以下、SwitchBot関連のコードは変更ありません)
 
 def _parse_switchbot_adv_data(adv_data):
     if SWITCHBOT_COMMON_SERVICE_UUID in adv_data.service_data:
@@ -254,4 +245,3 @@ async def get_switchbot_adv_data(mac_address: str):
     except Exception as e:
         logger.error(f"An unexpected error occurred in get_switchbot_adv_data for {mac_address}: {e}")
         return None
-

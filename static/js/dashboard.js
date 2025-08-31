@@ -39,6 +39,32 @@ function initializeDashboard() {
     }
 }
 
+/**
+ * タイムスタンプ文字列を見やすい形式にフォーマットする
+ * @param {string} timestampStr - "YYYY-MM-DD HH:MM:SS" 形式のタイムスタンプ
+ * @returns {string} フォーマットされた時間文字列
+ */
+function formatTimestamp(timestampStr) {
+    if (!timestampStr) return 'No data';
+    try {
+        const date = new Date(timestampStr.replace(' ', 'T'));
+        const now = new Date();
+
+        const isToday = date.getFullYear() === now.getFullYear() &&
+                        date.getMonth() === now.getMonth() &&
+                        date.getDate() === now.getDate();
+
+        if (isToday) {
+            return date.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
+        } else {
+            return `${date.getMonth() + 1}/${date.getDate()} ${date.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}`;
+        }
+    } catch (e) {
+        console.error("Error formatting timestamp:", e);
+        return timestampStr.split(' ')[1] || timestampStr;
+    }
+}
+
 async function updateHistoryChart(deviceId, period, chartInstances, selectedDate) {
     const canvas = document.getElementById(`history-chart-${deviceId}`);
     const loader = document.getElementById(`chart-loader-${deviceId}`);
@@ -117,12 +143,24 @@ async function updateHistoryChart(deviceId, period, chartInstances, selectedDate
 
 function updateDeviceCards(devices) {
     devices.forEach(device => {
-        updateElementText(`temp-${device.device_id}`, device.last_data.temperature?.toFixed(1) || '--');
-        updateElementText(`humidity-${device.device_id}`, device.last_data.humidity?.toFixed(1) || '--');
-        updateElementText(`light-${device.device_id}`, device.last_data.light_lux || '--');
-        updateElementText(`soil-${device.device_id}`, device.last_data.soil_moisture || '--');
+        const lastData = device.last_data || {};
+        updateElementText(`temp-${device.device_id}`, lastData.temperature?.toFixed(1) || '--');
+        updateElementText(`humidity-${device.device_id}`, lastData.humidity?.toFixed(1) || '--');
+        updateElementText(`light-${device.device_id}`, lastData.light_lux?.toFixed(1) || '--');
+        updateElementText(`soil-${device.device_id}`, lastData.soil_moisture || '--');
         updateElementText(`battery-${device.device_id}`, device.battery_level || '--');
         updateStatusVisuals(device.device_id, device.connection_status);
+
+        // タイムスタンプ要素をHTMLで更新
+        const timestampEl = document.getElementById(`timestamp-${device.device_id}`);
+        if (timestampEl) {
+            const timestampText = formatTimestamp(lastData.timestamp);
+            const newHtml = `<i class="bi bi-clock"></i> ${timestampText}`;
+            // コンテンツが変更された場合のみDOMを更新
+            if (timestampEl.innerHTML !== newHtml) {
+                timestampEl.innerHTML = newHtml;
+            }
+        }
     });
 }
 
@@ -150,3 +188,4 @@ function updateStatusVisuals(deviceId, status) {
     }
     iconElement.innerHTML = iconHtml;
 }
+

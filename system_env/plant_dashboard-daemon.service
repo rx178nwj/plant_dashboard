@@ -13,11 +13,11 @@ ExecStart=/home/pi/plant_dashboard/.venv/bin/python /home/pi/plant_dashboard/blu
 #作業ディレクトリ
 WorkingDirectory=/home/pi/plant_dashboard
 
-#エラー発生時に自動で再起動する
+# エラー発生時に自動で再起動する
 Restart=always
 RestartSec=10
 
-#標準出力と標準エラー出力をシステムログ(journald)に送る
+# 標準出力と標準エラー出力をシステムログ(journald)に送る
 StandardOutput=journal
 StandardError=journal
 

@@ -3,31 +3,24 @@
 # プロジェクトルートに移動
 cd "$(dirname "$0")/.."
 
-# 仮想環境が存在するか確認し、アクティベート
-if [ -d ".venv" ]; then
-  echo "--- Activating virtual environment ---"
-  source .venv/bin/activate
-else
-  echo "Virtual environment not found. Please run install.sh first."
-  exit 1
-fi
+echo "--- Enabling and starting systemd services ---"
 
-echo "--- Starting Gunicorn server ---"
+# Web Appサービス
+echo "Starting Plant Dashboard Web App..."
+sudo systemctl enable plant_dashboard.service
+sudo systemctl start plant_dashboard.service
 
-# wsgi:app を使用してアプリケーションを起動します。
-# workerを1に設定して、バックグラウンドスレッドの重複を防ぎます。
-gunicorn \
-    --workers=1 \
-    --threads=4 \
-    --bind 0.0.0.0:8000 \
-    --log-level=info \
-    --log-file=logs/gunicorn.log \
-    --access-logfile=logs/access.log \
-    --error-logfile=logs/error.log \
-    --pid logs/gunicorn.pid \
-    --daemon \
-    wsgi:app
+# BLE Daemonサービス
+echo "Starting Plant Dashboard BLE Daemon..."
+sudo systemctl enable plant_dashboard-daemon.service
+sudo systemctl start plant_dashboard-daemon.service
 
-echo "Gunicorn has been started in the background."
-echo "Check logs/gunicorn.log for status."
-echo "To stop the server, run: kill \`cat logs/gunicorn.pid\`"
+echo ""
+echo "--- Services started. ---"
+echo "You can check the status with:"
+echo "sudo systemctl status plant_dashboard.service"
+echo "sudo systemctl status plant_dashboard-daemon.service"
+echo ""
+echo "You can view the logs with:"
+echo "sudo journalctl -u plant_dashboard.service -f"
+echo "sudo journalctl -u plant_dashboard-daemon.service -f"

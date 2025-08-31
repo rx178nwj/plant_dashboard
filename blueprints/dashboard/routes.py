@@ -1,17 +1,12 @@
-# blueprints/dashboard/routes.py
-
 from flask import Blueprint, render_template, request, jsonify, Response
 from datetime import date
 import json
-from queue import Queue
+import time
 import device_manager as dm
 from functools import wraps
 
 # Blueprintオブジェクトを作成
 dashboard_bp = Blueprint('dashboard', __name__, template_folder='../../templates', static_folder='../../static')
-
-# Server-Sent Events用のキュー
-sse_queue = Queue()
 
 # --- 認証デコレーター ---
 from config import BASIC_AUTH_USERNAME, BASIC_AUTH_PASSWORD
@@ -45,8 +40,10 @@ def dashboard():
     conn.close()
 
     if selected_date_str == today_str:
-        devices_data = dm.get_all_devices()
+        # DBから最新のセンサーデータ付きでデバイスリストを取得
+        devices_data = dm.get_devices_with_latest_sensor_data()
     else:
+        # 過去の日付の場合は既存のロジックをそのまま使用
         devices_data = dm.get_devices_latest_on_date(selected_date_str)
 
     return render_template('dashboard.html', 
@@ -65,13 +62,10 @@ def api_history(device_id):
     
     conn = dm.get_db_connection()
     
-    # ▼▼▼ 24Hグラフのデータ取得ロジックを修正 ▼▼▼
     if period == '24h':
-        # 24Hの場合は、選択された日付の00:00から23:59までのデータを取得
         query = "SELECT timestamp, temperature, humidity FROM sensor_data WHERE device_id = ? AND date(timestamp) = ? ORDER BY timestamp ASC"
         history = conn.execute(query, (device_id, end_date_str)).fetchall()
     else:
-        # 他期間の場合は、選択された日付の終わりを基準にした期間で取得
         period_map = {
             '7d': "'-7 days'",
             '30d': "'-1 month'",
@@ -90,7 +84,20 @@ def api_history(device_id):
 def stream():
     """リアルタイムデータ配信用エンドポイント"""
     def event_stream():
+        last_data_json = ""
         while True:
-            data = sse_queue.get()
-            yield f"data: {json.dumps(data)}\n\n"
+            # DBから直接最新データを取得
+            devices_data_rows = dm.get_devices_with_latest_sensor_data()
+            
+            # DBのRowオブジェクトをJSONシリアライズ可能な辞書のリストに変換
+            current_data_json = json.dumps([dict(row) for row in devices_data_rows], default=str)
+            
+            # データに変更があった場合のみクライアントに送信
+            if current_data_json != last_data_json:
+                yield f"data: {current_data_json}\n\n"
+                last_data_json = current_data_json
+            
+            # 5秒待機してから再度チェック
+            time.sleep(5)
+            
     return Response(event_stream(), mimetype='text/event-stream')
