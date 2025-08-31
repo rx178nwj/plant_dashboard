@@ -1,0 +1,20 @@
+# /etc/systemd/system/plant_analyzer_daemon.service
+[Unit]
+Description=Plant Dashboard Data Analyzer Daemon
+After=network.target
+
+[Service]
+User=pi
+Group=pi
+
+# 新しい分析デーモンを実行
+ExecStart=/home/pi/plant_dashboard/.venv/bin/python /home/pi/plant_dashboard/plant_analyzer_daemon.py
+
+WorkingDirectory=/home/pi/plant_dashboard
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
