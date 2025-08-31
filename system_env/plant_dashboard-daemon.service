@@ -7,17 +7,12 @@ After=network.target
 User=pi
 Group=pi
 
-# 新しく作成したbluetooth_daemon.pyを仮想環境のPythonで実行
+# 実行するスクリプトをbluetooth_daemon.pyに戻す
 ExecStart=/home/pi/plant_dashboard/.venv/bin/python /home/pi/plant_dashboard/bluetooth_daemon.py
 
-#作業ディレクトリ
 WorkingDirectory=/home/pi/plant_dashboard
-
-# エラー発生時に自動で再起動する
 Restart=always
 RestartSec=10
-
-# 標準出力と標準エラー出力をシステムログ(journald)に送る
 StandardOutput=journal
 StandardError=journal
 

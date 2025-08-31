@@ -1,13 +1,18 @@
 # plant_dashboard/plant_analyzer_daemon.py
-import asyncio
 import logging
 import time
-from datetime import datetime, timedelta
+import json
+import os
+from datetime import datetime, date, timedelta
 
 import config
 import device_manager as dm
-from ble_manager import PlantDeviceBLE, get_switchbot_adv_data
 from database import init_db, get_db_connection
+from plant_logic import PlantStateAnalyzer
+
+DATA_PIPE_PATH = "/tmp/plant_dashboard_pipe.jsonl"
+# 1時間ごとに分析を実行
+ANALYSIS_INTERVAL_SECONDS = 3600
 
 logging.basicConfig(
     level=config.LOG_LEVEL,
@@ -19,151 +24,88 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-def analyze_plant_status(conn, managed_plant_id, library_plant_id, current_temp):
-    """過去のデータと現在の温度から成長期間と生存限界を判定する"""
-    plant_thresholds = conn.execute("SELECT * FROM plants WHERE plant_id = ?", (library_plant_id,)).fetchone()
-    if not plant_thresholds:
-        return 'unknown', 'unknown'
-
-    # 生存限界温度の判定
-    survival_status = 'safe'
-    if plant_thresholds['lethal_temp_high'] is not None and current_temp > plant_thresholds['lethal_temp_high']:
-        survival_status = 'lethal_high'
-    elif plant_thresholds['lethal_temp_low'] is not None and current_temp < plant_thresholds['lethal_temp_low']:
-        survival_status = 'lethal_low'
-
-    # 成長期間の判定（過去1週間の平均気温に基づく）
-    one_week_ago = datetime.now() - timedelta(days=7)
-    # hourly_plant_metricsテーブルから過去1週間の平均気温を取得
-    avg_temp_last_week_row = conn.execute(
-        "SELECT AVG(temp_avg) as avg_temp FROM hourly_plant_metrics WHERE managed_plant_id = ? AND timestamp >= ?",
-        (managed_plant_id, one_week_ago)
-    ).fetchone()
+def process_data_pipe():
+    """一時ファイルを処理してDBに保存する"""
+    if not os.path.exists(DATA_PIPE_PATH):
+        return
     
-    avg_temp_last_week = avg_temp_last_week_row['avg_temp'] if avg_temp_last_week_row and avg_temp_last_week_row['avg_temp'] is not None else current_temp
-    
-    growth_status = 'unknown'
-    if plant_thresholds['growing_fast_temp_low'] is not None and plant_thresholds['growing_fast_temp_high'] is not None and \
-       plant_thresholds['growing_fast_temp_low'] <= avg_temp_last_week <= plant_thresholds['growing_fast_temp_high']:
-        growth_status = 'fast_growth'
-    elif plant_thresholds['growing_slow_temp_low'] is not None and plant_thresholds['growing_slow_temp_high'] is not None and \
-         plant_thresholds['growing_slow_temp_low'] <= avg_temp_last_week <= plant_thresholds['growing_slow_temp_high']:
-        growth_status = 'slow_growth'
-    elif plant_thresholds['hot_dormancy_temp_low'] is not None and avg_temp_last_week > plant_thresholds['hot_dormancy_temp_low']:
-        growth_status = 'hot_dormancy'
-    elif plant_thresholds['cold_dormancy_temp_high'] is not None and avg_temp_last_week < plant_thresholds['cold_dormancy_temp_high']:
-        growth_status = 'cold_dormancy'
-        
-    return growth_status, survival_status
-
-async def summarize_hourly_data():
-    """1時間ごとにデータを集計し、分析する"""
-    logger.info("Hourly summary and analysis task started.")
-    conn = get_db_connection()
-    
+    # 複数のアナライザープロセスが同時に動くことを想定し、一意なファイル名で処理
+    processing_path = DATA_PIPE_PATH + f".processing_{os.getpid()}"
     try:
-        managed_plants = conn.execute("SELECT * FROM managed_plants WHERE assigned_switchbot_id IS NOT NULL AND library_plant_id IS NOT NULL").fetchall()
-        
-        # 1時間前の時刻を取得
-        target_hour_start = (datetime.now() - timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
-        target_hour_end = target_hour_start + timedelta(hours=1)
+        os.rename(DATA_PIPE_PATH, processing_path)
+    except FileNotFoundError:
+        return # 他のプロセスが先にリネームした場合
 
-        for plant in managed_plants:
-            sensor_id = plant['assigned_switchbot_id'] # 環境センサーを基準とする
-            
-            # 1時間分のデータを集計
-            query = """
-                SELECT
-                    AVG(temperature) as temp_avg, MAX(temperature) as temp_max, MIN(temperature) as temp_min,
-                    AVG(humidity) as humidity_avg, MAX(humidity) as humidity_max, MIN(humidity) as humidity_min,
-                    AVG(light_lux) as light_lux_avg, MAX(light_lux) as light_lux_max, MIN(light_lux) as light_lux_min
-                FROM sensor_data
-                WHERE device_id = ? AND timestamp >= ? AND timestamp < ?
-            """
-            summary = conn.execute(query, (sensor_id, target_hour_start, target_hour_end)).fetchone()
-
-            if summary and summary['temp_avg'] is not None:
-                # 判定処理
-                growth_status, survival_status = analyze_plant_status(conn, plant['managed_plant_id'], plant['library_plant_id'], summary['temp_avg'])
-
-                # 結果をDBに保存
-                conn.execute("""
-                    INSERT INTO hourly_plant_metrics (
-                        managed_plant_id, timestamp, 
-                        temp_avg, temp_max, temp_min, 
-                        humidity_avg, humidity_max, humidity_min, 
-                        light_lux_avg, light_lux_max, light_lux_min,
-                        growth_period_status, survival_limit_status
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (
-                    plant['managed_plant_id'], target_hour_start,
-                    summary['temp_avg'], summary['temp_max'], summary['temp_min'],
-                    summary['humidity_avg'], summary['humidity_max'], summary['humidity_min'],
-                    summary['light_lux_avg'], summary['light_lux_max'], summary['light_lux_min'],
-                    growth_status, survival_status
-                ))
-                conn.commit()
-                logger.info(f"Hourly metrics for '{plant['plant_name']}' have been saved.")
-            else:
-                logger.info(f"No sensor data found for '{plant['plant_name']}' in the last hour to summarize.")
-
-    except Exception as e:
-        logger.error(f"An error occurred during hourly summary: {e}", exc_info=True)
-    finally:
-        conn.close()
-
-
-async def main_loop():
-    logger.info("Starting Plant Analyzer Daemon loop...")
-    plant_sensor_connections = {}
-    last_summary_hour = -1
-
-    init_db()
-
-    while True:
-        # --- データ収集 ---
-        devices_to_poll = dm.load_devices_from_db()
-        if not devices_to_poll:
-            logger.info("No devices in DB. Waiting...")
-            await asyncio.sleep(config.DATA_FETCH_INTERVAL)
-            continue
-        
-        logger.info(f"Starting data collection for {len(devices_to_poll)} devices.")
-        for device_id, device in devices_to_poll.items():
+    lines_processed = 0
+    with open(processing_path, "r") as f:
+        for line in f:
             try:
-                sensor_data = None
-                if device['device_type'] == 'plant_sensor':
-                    if device_id not in plant_sensor_connections:
-                        plant_sensor_connections[device_id] = PlantDeviceBLE(device['mac_address'], device_id)
-                    ble_device = plant_sensor_connections[device_id]
-                    if await ble_device.ensure_connection():
-                        sensor_data = await ble_device.get_sensor_data()
-                elif device['device_type'].startswith('switchbot_'):
-                    sensor_data = await get_switchbot_adv_data(device['mac_address'])
+                record = json.loads(line.strip())
+                device_id, sensor_data = record.get("device_id"), record.get("data")
                 
-                if sensor_data:
+                if record.get("error"):
+                    dm.update_device_status(device_id, 'error')
+                elif sensor_data:
                     dm.save_sensor_data(device_id, sensor_data)
                     dm.update_device_status(device_id, 'connected', sensor_data.get('battery_level'))
                 else:
                     dm.update_device_status(device_id, 'disconnected')
+                lines_processed += 1
             except Exception as e:
-                logger.error(f"Error collecting data for {device_id}: {e}", exc_info=True)
-                dm.update_device_status(device_id, 'error')
-            await asyncio.sleep(2)
+                logger.error(f"Error processing record: {line.strip()} - {e}")
+    
+    os.remove(processing_path)
+    if lines_processed > 0:
+        logger.info(f"Processed {lines_processed} records from the data pipe.")
 
-        # --- 1時間ごとの集計・分析タスク ---
-        current_hour = datetime.now().hour
-        if current_hour != last_summary_hour:
-            await summarize_hourly_data()
-            last_summary_hour = current_hour
+def run_full_analysis(target_date):
+    """指定された日付の分析をすべての管理植物に対して実行する"""
+    conn = get_db_connection()
+    try:
+        managed_plants = conn.execute("SELECT * FROM managed_plants").fetchall()
+        logger.info(f"Found {len(managed_plants)} managed plants to analyze for {target_date}.")
+        for plant_row in managed_plants:
+            analyzer = PlantStateAnalyzer(dict(plant_row), conn)
+            analyzer.run_analysis_for_date(target_date)
+    except Exception as e:
+        logger.error(f"An error occurred during the analysis for {target_date}: {e}", exc_info=True)
+    finally:
+        if conn:
+            conn.close()
 
-        logger.info(f"Cycle finished. Waiting for {config.DATA_FETCH_INTERVAL} seconds.")
-        await asyncio.sleep(config.DATA_FETCH_INTERVAL)
+def main_loop():
+    logger.info("Starting Plant Analyzer Daemon loop...")
+    last_processed_date = None
+    
+    init_db()
+
+    while True:
+        # --- ① Bluetoothデーモンからのデータを取り込む ---
+        process_data_pipe()
+
+        current_date = date.today()
+        
+        # --- ② 日付が変わり、最初の実行かチェック ---
+        if last_processed_date != current_date:
+            yesterday = current_date - timedelta(days=1)
+            # 初回起動時以外は、前日分の分析を最終確定させる
+            if last_processed_date is not None:
+                 logger.info(f"New day detected. Finalizing analysis for {yesterday}...")
+                 run_full_analysis(yesterday)
+            last_processed_date = current_date
+
+        # --- ③ 1時間ごとに当日の暫定分析を実行 ---
+        logger.info(f"Running hourly analysis for {current_date}...")
+        run_full_analysis(current_date)
+        
+        logger.info(f"Analysis cycle finished. Waiting for {ANALYSIS_INTERVAL_SECONDS} seconds.")
+        time.sleep(ANALYSIS_INTERVAL_SECONDS)
 
 if __name__ == "__main__":
     try:
-        asyncio.run(main_loop())
+        main_loop()
     except KeyboardInterrupt:
-        logger.info("Daemon stopped by user.")
+        logger.info("Analyzer daemon stopped by user.")
     except Exception as e:
-        logger.critical(f"Daemon stopped due to a critical error: {e}", exc_info=True)
+        logger.critical(f"Analyzer daemon stopped due to a critical error: {e}", exc_info=True)
+

@@ -3,9 +3,15 @@
 import sqlite3
 import logging
 from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from database import get_db_connection
 
 logger = logging.getLogger(__name__)
+
+# --- ▼▼▼ ADD Timezone Definition ▼▼▼ ---
+# 日本標準時(JST)のタイムゾーンを定義
+JST = timezone(timedelta(hours=+9), 'JST')
+# --- ▲▲▲ ADD Timezone Definition ▲▲▲ ---
 
 # このインメモリキャッシュは、デーモンが動いていない開発時などに
 # 直接は使われませんが、関連機能のために構造は残します。

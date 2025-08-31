@@ -1,19 +1,21 @@
 # plant_dashboard/bluetooth_daemon.py
-
 import asyncio
 import logging
-import time
+import json
+from datetime import datetime
+import os
 
-# プロジェクトのモジュールをインポート
 import config
 import device_manager as dm
 from ble_manager import PlantDeviceBLE, get_switchbot_adv_data
-from database import init_db
+from database import get_db_connection
 
-# ロギング設定
+# データ連携用の一時ファイルパス
+DATA_PIPE_PATH = "/tmp/plant_dashboard_pipe.jsonl"
+
 logging.basicConfig(
     level=config.LOG_LEVEL,
-    format='%(asctime)s - [BLE_Daemon] - %(levelname)s - %(message)s',
+    format='%(asctime)s - [BluetoothDaemon] - %(levelname)s - %(message)s',
     handlers=[
         logging.FileHandler(config.LOG_FILE_PATH),
         logging.StreamHandler()
@@ -21,19 +23,28 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+def get_devices_from_db():
+    """DBからポーリング対象のデバイス情報を取得する"""
+    conn = get_db_connection()
+    devices = conn.execute('SELECT device_id, device_name, mac_address, device_type FROM devices').fetchall()
+    conn.close()
+    return [dict(row) for row in devices]
+
+def write_to_pipe(data):
+    """取得したデータを一時ファイルにJSON Lines形式で追記する"""
+    try:
+        with open(DATA_PIPE_PATH, "a") as f:
+            f.write(json.dumps(data) + "\n")
+    except Exception as e:
+        logger.error(f"Failed to write to data pipe: {e}")
+
 async def main_loop():
-    """
-    バックグラウンドでデバイスデータを収集する統合Bluetoothデーモンループ。
-    データベースへのデータ保存に専念する。
-    """
+    """Bluetoothデバイスのポーリングに専念するメインループ"""
     logger.info("Starting Bluetooth daemon loop...")
     plant_sensor_connections = {}
-    
-    # 起動時にDBを初期化
-    init_db()
 
     while True:
-        devices_to_poll = dm.load_devices_from_db()
+        devices_to_poll = get_devices_from_db()
         
         if not devices_to_poll:
             logger.info("No devices configured in the database. Waiting...")
@@ -54,33 +65,39 @@ async def main_loop():
                 if device_type == 'plant_sensor':
                     if dev_id not in plant_sensor_connections:
                         plant_sensor_connections[dev_id] = PlantDeviceBLE(mac_address, dev_id)
-                    
                     ble_device = plant_sensor_connections[dev_id]
-                    
-                    if await ble_device.ensure_connection():
-                        sensor_data = await ble_device.get_sensor_data()
+                    sensor_data = await ble_device.get_sensor_data()
                         
                 elif device_type and device_type.startswith('switchbot_'):
                     sensor_data = await get_switchbot_adv_data(mac_address)
                 
-                if sensor_data:
-                    dm.save_sensor_data(dev_id, sensor_data)
-                    dm.update_device_status(dev_id, 'connected', sensor_data.get('battery_level'))
-                else:
-                    dm.update_device_status(dev_id, 'disconnected')
+                # 取得結果をpipeファイルに書き出す
+                pipe_data = {
+                    "device_id": dev_id,
+                    "timestamp": datetime.now().isoformat(),
+                    "data": sensor_data # データがなくてもNoneとして記録
+                }
+                write_to_pipe(pipe_data)
 
             except Exception as e:
                 logger.error(f"Unhandled error during data collection for {dev_id}: {e}", exc_info=True)
-                dm.update_device_status(dev_id, 'error')
+                # エラー情報もpipeに書き出す
+                write_to_pipe({
+                    "device_id": dev_id,
+                    "timestamp": datetime.now().isoformat(),
+                    "error": str(e)
+                })
             
-            # デバイス間のポーリングに短い遅延を入れる
-            await asyncio.sleep(2)
+            await asyncio.sleep(2) # デバイス間のポーリングに短い遅延
 
         logger.info(f"Data collection cycle finished. Waiting for {config.DATA_FETCH_INTERVAL} seconds.")
         await asyncio.sleep(config.DATA_FETCH_INTERVAL)
 
 if __name__ == "__main__":
     try:
+        # 起動時に一時ファイルが残っていれば削除
+        if os.path.exists(DATA_PIPE_PATH):
+            os.remove(DATA_PIPE_PATH)
         asyncio.run(main_loop())
     except KeyboardInterrupt:
         logger.info("Bluetooth daemon stopped by user.")
