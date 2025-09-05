@@ -4,10 +4,11 @@ import device_manager as dm
 import json
 import uuid
 import os
+import httpx # httpxをインポート
 from werkzeug.utils import secure_filename
-from lib.gemini_client import lookup_plant_info
+# from lib.gemini_client import lookup_plant_info # 不要になったため削除
 from blueprints.dashboard.routes import requires_auth
-import asyncio # AI検索のためにインポート
+# import asyncio # 不要になったため削除
 
 plants_bp = Blueprint('plants', __name__, template_folder='../../templates')
 
@@ -71,10 +72,61 @@ def api_plant_lookup():
         return jsonify({'success': False, 'message': 'Plant name is required.'}), 400
 
     try:
-        # gemini_clientから関数を呼び出す
-        response_data = asyncio.run(lookup_plant_info(plant_name))
+        prompt = f"""
+        Search the web to find the most accurate and detailed information for the plant '{plant_name}'.
+        Identify a single, representative native region. Provide monthly climate data for that region.
+        Also, provide distinct temperature ranges for its fast growth, slow growth, hot dormancy, and cold dormancy periods.
+        Provide separate watering instructions for each of these four periods.
+        Also, find a representative, high-quality image of the plant from the web and provide a direct URL to it.
+        I need all information in a structured JSON format. If a value is unknown, use null. All temperatures are in Celsius.
+
+        JSON format: {{
+          "origin_country": "string", "origin_region": "string",
+          "monthly_temps": {{ "jan": {{"avg": integer, "high": integer, "low": integer}}, ...11 more months... }},
+          "growing_fast_temp_high": integer, "growing_fast_temp_low": integer,
+          "growing_slow_temp_high": integer, "growing_slow_temp_low": integer,
+          "hot_dormancy_temp_high": integer, "hot_dormancy_temp_low": integer,
+          "cold_dormancy_temp_high": integer, "cold_dormancy_temp_low": integer,
+          "lethal_temp_high": integer, "lethal_temp_low": integer,
+          "watering_growing": "string", "watering_slow_growing": "string",
+          "watering_hot_dormancy": "string", "watering_cold_dormancy": "string",
+          "image_url": "string (a direct URL to a representative image)"
+        }}
+        """
+        api_key = current_app.config.get('GEMINI_API_KEY')
+        if not api_key or api_key == 'YOUR_API_KEY_HERE':
+            raise ValueError("Gemini API key is not configured")
+
+        api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key={api_key}"
+        payload = {"contents": [{"parts": [{"text": prompt}]}], "generationConfig": {"response_mime_type": "application/json"}}
+        
+        # 同期httpxクライアントを使用
+        with httpx.Client(timeout=45.0) as client:
+            response = client.post(api_url, json=payload)
+            response.raise_for_status()
+            result = response.json()
+
+        # 結果をパース
+        content = result['candidates'][0]['content']['parts'][0]['text']
+        if content.strip().startswith("```json"):
+            content = content.strip()[7:-3]
+        response_data = json.loads(content)
+
+        # AIが有効な画像URLを返さなかった場合（Noneや文字列"null"の場合を含む）、
+        # image_urlキーを削除してフロントエンドで既存の画像が上書きされないようにする
+        image_url = response_data.get('image_url')
+        if not image_url or image_url == 'null':
+            response_data.pop('image_url', None)
+
         return jsonify({'success': True, 'data': response_data})
+        
+    except httpx.HTTPStatusError as e:
+        # より具体的なエラーハンドリング
+        return jsonify({'success': False, 'message': f'AI service returned an error: {e.response.status_code}'}), 500
+    except (KeyError, IndexError, json.JSONDecodeError):
+        return jsonify({'success': False, 'message': 'Could not parse Gemini API response.'}), 500
     except Exception as e:
+        # 一般的な例外
         return jsonify({'success': False, 'message': str(e)}), 500
 
 
@@ -151,3 +203,4 @@ def delete_plant(plant_id):
         return jsonify({'success': True, 'message': 'Plant deleted successfully.'})
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 500
+

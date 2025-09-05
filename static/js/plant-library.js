@@ -18,10 +18,14 @@ function initializePlantLibrary() {
     const imageUrlInput = document.getElementById('image-url');
     const imageUploadInput = document.getElementById('plant-image-upload');
     const monthlyTempsTbody = document.getElementById('monthly-temps-tbody');
+    const originCountryInput = document.getElementById('origin-country');
+    const originRegionInput = document.getElementById('origin-region');
     
     // 埋め込まれたJSONデータを安全に読み込む
     const serverDataElement = document.getElementById('server-data');
     const plantsData = serverDataElement ? JSON.parse(serverDataElement.textContent) : [];
+    
+    let climateChart = null; // グラフインスタンスを保持する変数
 
     // --- ▼▼▼ ヘルパー関数を先に定義 ▼▼▼ ---
 
@@ -31,6 +35,80 @@ function initializePlantLibrary() {
         document.getElementById('image-url-group').style.display = (source === 'url') ? 'block' : 'none';
         document.getElementById('image-upload-group').style.display = (source === 'upload') ? 'block' : 'none';
     };
+
+    // 地図を更新する関数
+    const updateMap = () => {
+        const country = originCountryInput.value;
+        const region = originRegionInput.value;
+        const mapContainer = document.getElementById('map-container');
+        const mapFrame = document.getElementById('origin-map');
+
+        if (country || region) {
+            const query = encodeURIComponent(`${region}, ${country}`);
+            mapFrame.src = `https://maps.google.com/maps?q=${query}&t=&z=5&ie=UTF8&iwloc=&output=embed`;
+            mapContainer.style.display = 'block';
+        } else {
+            mapContainer.style.display = 'none';
+        }
+    };
+    
+    // 月間気候グラフを描画する関数
+    const renderClimateChart = (temps) => {
+        const chartCanvas = document.getElementById('climate-chart');
+        const chartContainer = document.getElementById('climate-chart-container');
+        if (!chartCanvas || !chartContainer) return;
+
+        if (climateChart) {
+            climateChart.destroy();
+            climateChart = null;
+        }
+
+        if (!temps || Object.keys(temps).length === 0) {
+            chartContainer.style.display = 'none';
+            return;
+        }
+
+        const months = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+        const labels = months.map(m => m.charAt(0).toUpperCase() + m.slice(1));
+
+        const datasets = [
+            {
+                label: 'High (°C)',
+                data: months.map(m => temps[m]?.high ?? null),
+                borderColor: 'rgba(255, 99, 132, 1)',
+                backgroundColor: 'rgba(255, 99, 132, 0.1)',
+                tension: 0.1
+            },
+            {
+                label: 'Avg (°C)',
+                data: months.map(m => temps[m]?.avg ?? null),
+                borderColor: 'rgba(54, 162, 235, 1)',
+                backgroundColor: 'rgba(54, 162, 235, 0.1)',
+                tension: 0.1
+            },
+            {
+                label: 'Low (°C)',
+                data: months.map(m => temps[m]?.low ?? null),
+                borderColor: 'rgba(75, 192, 192, 1)',
+                backgroundColor: 'rgba(75, 192, 192, 0.1)',
+                tension: 0.1
+            }
+        ];
+
+        const ctx = chartCanvas.getContext('2d');
+        climateChart = new Chart(ctx, {
+            type: 'line',
+            data: { labels: labels, datasets: datasets },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { title: { display: true, text: 'Monthly Average Climate' } },
+                scales: { y: { title: { display: true, text: 'Temperature (°C)' } } }
+            }
+        });
+        chartContainer.style.display = 'block';
+    };
+
 
     // 月間気候データをテーブルに描画する関数
     const populateMonthlyTemps = (temps) => {
@@ -77,16 +155,22 @@ function initializePlantLibrary() {
                 }
             }
         }
-        editorTitle.textContent = `Editing: ${data.genus || ''} ${data.species || ''}`.trim();
+        
+        // フォームの現在の値に基づいてエディタのタイトルを更新
+        const currentGenus = document.getElementById('genus').value;
+        const currentSpecies = document.getElementById('species').value;
+        editorTitle.textContent = `Editing: ${currentGenus || ''} ${currentSpecies || ''}`.trim();
 
         if (data.image_url) {
             imagePreview.src = data.image_url;
             imageUrlInput.value = data.image_url;
             document.getElementById('image-source-url').checked = true;
-        } else {
+        } else if (!keepUserInput) {
             imagePreview.src = 'https://placehold.co/600x300/eee/ccc?text=Plant+Image';
         }
         toggleImageSource();
+        updateMap();
+        renderClimateChart(data.monthly_temps);
     };
 
     // フォームの内容をJSONオブジェクトに変換する関数
@@ -98,8 +182,27 @@ function initializePlantLibrary() {
                  data[key] = value;
             }
         }
-        // monthly_temps は別途構築する必要があるかもしれないが、
-        // 現状はサーバー側でjson文字列として保存しているのでこのままでOK
+        
+        // monthly_temps をテーブルから手動で構築
+        const monthlyTemps = {};
+        const tempRows = monthlyTempsTbody.querySelectorAll('tr');
+        tempRows.forEach(row => {
+            const cells = row.querySelectorAll('td');
+            if (cells.length === 4) {
+                const month = cells[0].textContent.toLowerCase().substring(0, 3);
+                const avg = parseInt(cells[1].textContent, 10);
+                const high = parseInt(cells[2].textContent, 10);
+                const low = parseInt(cells[3].textContent, 10);
+
+                monthlyTemps[month] = {
+                    avg: isNaN(avg) ? null : avg,
+                    high: isNaN(high) ? null : high,
+                    low: isNaN(low) ? null : low
+                };
+            }
+        });
+        data.monthly_temps = monthlyTemps;
+
         return data;
     };
 
@@ -116,7 +219,9 @@ function initializePlantLibrary() {
         imagePreview.src = 'https://placehold.co/600x300/eee/ccc?text=Plant+Image';
         monthlyTempsTbody.innerHTML = ''; // 気候テーブルをクリア
         document.getElementById('image-source-url').checked = true;
-        toggleImageSource(); 
+        toggleImageSource();
+        updateMap();
+        renderClimateChart(null); // グラフをクリア
         placeholder.style.display = 'none';
         editorArea.style.display = 'block';
     });
@@ -254,6 +359,10 @@ function initializePlantLibrary() {
         radio.addEventListener('change', toggleImageSource);
     });
 
+    // 原産国・地域の入力イベント
+    originCountryInput.addEventListener('input', updateMap);
+    originRegionInput.addEventListener('input', updateMap);
+
     // 画像URL入力
     imageUrlInput.addEventListener('input', (e) => {
         imagePreview.src = e.target.value || 'https://placehold.co/600x300/eee/ccc?text=Plant+Image';
@@ -271,3 +380,4 @@ function initializePlantLibrary() {
         }
     });
 }
+
