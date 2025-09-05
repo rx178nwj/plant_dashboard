@@ -16,47 +16,47 @@
     <!-- ▼▼▼ 植物中心のカード表示エリア ▼▼▼ -->
     <h2 class="h3">Managed Plants Status</h2>
     <div id="plant-cards-container" class="row">
-        {% for plant in plants_data %}
-        {% set sensor_data = plant.sensors.get('primary', {}) %}
+        {% for plant_item in plants_data %}
         <div class="col-xl-4 col-md-6 mb-4">
-            <a href="{{ url_for('dashboard.plant_detail', managed_plant_id=plant.managed_plant_id) }}" class="text-decoration-none text-dark plant-card-link">
-                <div id="plant-card-{{ plant.managed_plant_id }}" class="card h-100 shadow-sm plant-card">
+            <a href="{{ url_for('dashboard.plant_detail', managed_plant_id=plant_item.managed_plant_id) }}" class="text-decoration-none text-dark">
+                <div id="plant-card-{{ plant_item.managed_plant_id }}" class="card h-100 shadow-sm plant-card">
                     <div class="row g-0 h-100">
                         <div class="col-4">
-                            <img src="{{ plant.image_url or 'https://placehold.co/400x600/eeeeee/cccccc?text=No+Image' }}" 
+                            <img src="{{ plant_item.image_url or 'https://placehold.co/400x600/eeeeee/cccccc?text=No+Image' }}" 
                                  onerror="this.onerror=null;this.src='https://placehold.co/400x600/eeeeee/cccccc?text=No+Image';"
                                  class="img-fluid rounded-start h-100 w-100" 
-                                 alt="{{ plant.plant_name }}">
+                                 alt="{{ plant_item.plant_name }}">
                         </div>
                         <div class="col-8 d-flex flex-column">
                             <div class="card-header bg-white border-bottom-0">
-                                <h5 class="card-title mb-0" style="font-size: 1.1rem;">{{ plant.plant_name }}</h5>
-                                <small class="text-muted">{{ plant.genus }} {{ plant.species }}</small>
+                                <h5 class="card-title mb-0" style="font-size: 1.1rem;">{{ plant_item.plant_name }}</h5>
+                                <small class="text-muted">{{ plant_item.genus }} {{ plant_item.species }}</small>
                             </div>
                             <div class="card-body py-2">
                                 <h6 class="card-subtitle mb-2 text-muted small"><i class="bi bi-hdd-stack"></i> Sensor Readings</h6>
+                                {% set sensor_data = plant_item.sensors.get('primary', {}) %}
                                 <div class="row text-center sensor-data-grid">
                                     <div class="col-6 mb-2">
                                         <i class="bi bi-thermometer-half text-danger"></i>
-                                        <span id="temp-{{ plant.managed_plant_id }}" class="fs-6 fw-bold">
+                                        <span id="temp-{{ plant_item.managed_plant_id }}" class="fs-6 fw-bold">
                                             {{ sensor_data.temperature | round(1) if sensor_data and 'temperature' in sensor_data and sensor_data.temperature is not none else '--' }}
                                         </span> °C
                                     </div>
                                     <div class="col-6 mb-2">
                                         <i class="bi bi-droplet-half text-primary"></i> 
-                                        <span id="humidity-{{ plant.managed_plant_id }}" class="fs-6 fw-bold">
+                                        <span id="humidity-{{ plant_item.managed_plant_id }}" class="fs-6 fw-bold">
                                             {{ sensor_data.humidity | round(1) if sensor_data and 'humidity' in sensor_data and sensor_data.humidity is not none else '--' }}
                                         </span> %
                                     </div>
                                     <div class="col-6">
                                         <i class="bi bi-brightness-high text-warning"></i> 
-                                        <span id="light-{{ plant.managed_plant_id }}" class="fs-6 fw-bold">
+                                        <span id="light-{{ plant_item.managed_plant_id }}" class="fs-6 fw-bold">
                                             {{ sensor_data.light_lux | round(1) if sensor_data and 'light_lux' in sensor_data and sensor_data.light_lux is not none else '--' }}
                                         </span> lx
                                     </div>
                                     <div class="col-6">
                                         <i class="bi bi-moisture text-success"></i> 
-                                        <span id="soil-{{ plant.managed_plant_id }}" class="fs-6 fw-bold">
+                                        <span id="soil-{{ plant_item.managed_plant_id }}" class="fs-6 fw-bold">
                                             {{ sensor_data.soil_moisture if sensor_data and 'soil_moisture' in sensor_data and sensor_data.soil_moisture is not none else '--' }}
                                         </span>
                                     </div>
@@ -64,14 +64,14 @@
                             </div>
                             <div class="card-footer bg-white mt-auto">
                                 <h6 class="card-subtitle mb-2 text-muted small"><i class="bi bi-clipboard-data"></i> Latest Analysis</h6>
-                                <div id="analysis-{{ plant.managed_plant_id }}" class="analysis-section">
+                                <div id="analysis-{{ plant_item.managed_plant_id }}" class="analysis-section">
                                     <span class="badge bg-light text-dark me-2">
                                         <i class="bi bi-sun"></i> Growth: 
-                                        <strong id="growth-{{ plant.managed_plant_id }}">{{ plant.analysis.growth_period | replace('_', ' ') | title | default('Unknown') }}</strong>
+                                        <strong id="growth-{{ plant_item.managed_plant_id }}">{{ plant_item.analysis.growth_period | replace('_', ' ') | title | default('Unknown') }}</strong>
                                     </span>
-                                    <span class="badge {% if plant.analysis.watering_advice and 'needed' in plant.analysis.watering_advice|lower %}bg-primary text-white{% else %}bg-light text-dark{% endif %}">
+                                    <span class="badge {% if plant_item.analysis.watering_advice and 'needed' in plant_item.analysis.watering_advice|lower %}bg-primary text-white{% else %}bg-light text-dark{% endif %}">
                                         <i class="bi bi-water"></i> Advice: 
-                                        <strong id="watering-{{ plant.managed_plant_id }}">{{ plant.analysis.watering_advice | default('N/A') }}</strong>
+                                        <strong id="watering-{{ plant_item.managed_plant_id }}">{{ plant_item.analysis.watering_advice | default('N/A') }}</strong>
                                     </span>
                                 </div>
                             </div>

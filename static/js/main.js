@@ -10,6 +10,14 @@ document.addEventListener('DOMContentLoaded', function() {
     if (document.getElementById('dashboard-page')) {
         initializeDashboard();
     }
+    // グラフを持つページで共通のセンサーチャート初期化を呼び出す
+    if (document.getElementById('dashboard-page') || document.getElementById('plant-detail-page')) {
+        initializePageCharts();
+    }
+    // 詳細ページで分析チャートを初期化
+    if (document.getElementById('plant-detail-page')) {
+        initializeAnalysisCharts();
+    }
     if (document.getElementById('devices-page')) {
         initializeDeviceManagement();
     }

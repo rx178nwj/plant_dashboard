@@ -3,7 +3,7 @@
 {% block title %}{{ plant.plant_name }} - 詳細{% endblock %}
 
 {% block content %}
-<div id="plant-detail-page" data-plant-id="{{ plant.managed_plant_id }}">
+<div id="plant-detail-page" data-plant-id="{{ plant.managed_plant_id }}" data-selected-date="{{ plant.sensors.primary.timestamp.split(' ')[0] if plant.sensors.primary.timestamp else '' }}">
 
     <!-- ページヘッダー -->
     <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
@@ -36,6 +36,7 @@
                             <i class="bi bi-droplet-half text-primary"></i> 湿度<br>
                             <span class="fs-5 fw-bold">{{ sensor_data.humidity | round(1) if sensor_data and 'humidity' in sensor_data and sensor_data.humidity is not none else '--' }}</span> %
                         </div>
+                        {% if plant.sensors.source == 'soil_sensor' %}
                         <div class="col-6">
                             <i class="bi bi-brightness-high text-warning"></i> 照度<br>
                             <span class="fs-5 fw-bold">{{ sensor_data.light_lux | round(1) if sensor_data and 'light_lux' in sensor_data and sensor_data.light_lux is not none else '--' }}</span> lx
@@ -44,6 +45,7 @@
                             <i class="bi bi-moisture text-success"></i> 土壌水分<br>
                             <span class="fs-5 fw-bold">{{ sensor_data.soil_moisture if sensor_data and 'soil_moisture' in sensor_data and sensor_data.soil_moisture is not none else '--' }}</span>
                         </div>
+                        {% endif %}
                     </div>
                 </div>
                 <div class="card-footer">
@@ -66,7 +68,7 @@
                 </div>
                 <div class="card-body">
                     {% if plant.origin_country %}
-                    <h6 class="card-subtitle mb-2 text-muted">原産地 </h6>
+                    <h6 class="card-subtitle mb-2 text-muted">原産地</h6>
                     <p><strong>国:</strong> {{ plant.origin_country }}<br>
                        <strong>地域:</strong> {{ plant.origin_region }}</p>
                     
@@ -165,11 +167,34 @@
                 </div>
             </div>
             
+            <!-- 日別集計グラフ -->
+            <div class="card shadow-sm mb-4">
+                 <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-graph-up-arrow"></i> 日別集計グラフ</h5>
+                </div>
+                <div class="card-body">
+                    {% set managed_id = plant.managed_plant_id %}
+                    <div class="btn-group btn-group-sm mb-3" role="group">
+                        <button type="button" class="btn btn-outline-secondary analysis-period-btn active" data-period="7d" data-plant-id="{{ managed_id }}">1 Week</button>
+                        <button type="button" class="btn btn-outline-secondary analysis-period-btn" data-period="30d" data-plant-id="{{ managed_id }}">1 Month</button>
+                        <button type="button" class="btn btn-outline-secondary analysis-period-btn" data-period="1y" data-plant-id="{{ managed_id }}">1 Year</button>
+                    </div>
+                    <div class="position-relative" style="height:300px">
+                        <canvas id="analysis-history-chart-{{ managed_id }}"></canvas>
+                        <div id="analysis-chart-loader-{{ managed_id }}" class="position-absolute top-50 start-50 translate-middle d-none">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- センサーグラフ -->
             {% if plant.assigned_plant_sensor_id or plant.assigned_switchbot_id %}
             <div class="card shadow-sm">
                  <div class="card-header">
-                    <h5 class="mb-0"><i class="bi bi-graph-up"></i> センサーグラフ</h5>
+                    <h5 class="mb-0"><i class="bi bi-graph-up"></i> センサーグラフ (直近24時間)</h5>
                 </div>
                 <div class="card-body">
                     {% set device_id_to_chart = plant.assigned_plant_sensor_id or plant.assigned_switchbot_id %}

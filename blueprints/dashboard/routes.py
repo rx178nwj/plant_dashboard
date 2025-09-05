@@ -1,5 +1,5 @@
 from flask import Blueprint, render_template, request, jsonify, Response, abort
-from datetime import date
+from datetime import date, timedelta
 import json
 import time
 import device_manager as dm
@@ -30,6 +30,7 @@ def requires_auth(f):
 def get_plant_centric_data(selected_date_str):
     """
     管理されている植物を中心としたダッシュボード用のデータを集約して取得する。
+    Soil Sensorが割り当てられている場合は、そのデータを優先的に使用する。
     """
     conn = dm.get_db_connection()
     
@@ -61,6 +62,7 @@ def get_plant_centric_data(selected_date_str):
         plant_data['sensors'] = {}
         sensor_data = None
 
+        # 土壌センサーが割り当てられている場合、それを最優先
         if plant_data['assigned_plant_sensor_id']:
             sensor_data = conn.execute("""
                 SELECT s.temperature, s.humidity, s.light_lux, s.soil_moisture, d.battery_level, s.timestamp
@@ -70,6 +72,7 @@ def get_plant_centric_data(selected_date_str):
             """, (plant_data['assigned_plant_sensor_id'], end_of_day_str)).fetchone()
             plant_data['sensors']['source'] = 'soil_sensor'
 
+        # 土壌センサーのデータがない、または割り当てられていない場合、環境センサーをフォールバックとして使用
         if not sensor_data and plant_data['assigned_switchbot_id']:
             sensor_data = conn.execute("""
                 SELECT s.temperature, s.humidity, d.battery_level, s.timestamp
@@ -128,48 +131,30 @@ def plant_detail(managed_plant_id):
 
     if plant_row is None:
         conn.close()
-        abort(404, description="指定された植物が見つかりません。")
+        abort(404, description="Plant not found")
+        
+    plant_data = get_plant_centric_data(date.today().isoformat())
+    
+    # このままだと全プラントのデータを取ってしまうので、特定のプラントだけをフィルタリング
+    plant = next((p for p in plant_data if p['managed_plant_id'] == managed_plant_id), None)
+    # plant_dataにはライブラリ情報が含まれていないため、マージする
+    if plant:
+        plant.update(dict(plant_row))
 
-    plant_data = dict(plant_row)
-
-    # 最新のセンサーデータと分析結果を取得（本日を基準）
-    today_str = date.today().isoformat()
-    end_of_day_str = f"{today_str} 23:59:59"
-
-    analysis = conn.execute("""
-        SELECT growth_period, watering_advice
-        FROM daily_plant_analysis
-        WHERE managed_plant_id = ? AND analysis_date <= ?
-        ORDER BY analysis_date DESC LIMIT 1
-    """, (managed_plant_id, today_str)).fetchone()
-    plant_data['analysis'] = dict(analysis) if analysis else {}
-
-    plant_data['sensors'] = {}
-    sensor_data = None
-    if plant_data.get('assigned_plant_sensor_id'):
-        sensor_data = conn.execute("""
-            SELECT temperature, humidity, light_lux, soil_moisture FROM sensor_data
-            WHERE device_id = ? AND timestamp <= ? ORDER BY timestamp DESC LIMIT 1
-        """, (plant_data['assigned_plant_sensor_id'], end_of_day_str)).fetchone()
-
-    if not sensor_data and plant_data.get('assigned_switchbot_id'):
-        sensor_data = conn.execute("""
-            SELECT temperature, humidity FROM sensor_data
-            WHERE device_id = ? AND timestamp <= ? ORDER BY timestamp DESC LIMIT 1
-        """, (plant_data['assigned_switchbot_id'], end_of_day_str)).fetchone()
-
-    plant_data['sensors']['primary'] = dict(sensor_data) if sensor_data else {}
-
-    # 日毎の履歴データをすべて取得
+    # 日毎の履歴を取得
     daily_history = conn.execute("""
         SELECT * FROM daily_plant_analysis
-        WHERE managed_plant_id = ? ORDER BY analysis_date DESC
+        WHERE managed_plant_id = ?
+        ORDER BY analysis_date DESC
     """, (managed_plant_id,)).fetchall()
 
     conn.close()
 
-    return render_template('plant_detail.html',
-                           plant=plant_data,
+    if plant is None:
+        abort(404, description="Plant data could not be loaded")
+
+    return render_template('plant_detail.html', 
+                           plant=plant, 
                            daily_history=daily_history,
                            active_page='dashboard')
 
@@ -183,18 +168,78 @@ def api_history(device_id):
     
     conn = dm.get_db_connection()
     
+    # 取得するカラムに light_lux と soil_moisture を追加
+    columns = "timestamp, temperature, humidity, light_lux, soil_moisture"
+    
     if period == '24h':
-        query = "SELECT timestamp, temperature, humidity FROM sensor_data WHERE device_id = ? AND date(timestamp) = ? ORDER BY timestamp ASC"
+        query = f"SELECT {columns} FROM sensor_data WHERE device_id = ? AND date(timestamp) = ? ORDER BY timestamp ASC"
         history = conn.execute(query, (device_id, end_date_str)).fetchall()
     else:
         period_map = { '7d': "'-7 days'", '30d': "'-1 month'", '1y': "'-1 year'" }
         time_modifier = period_map.get(period, "'-7 days'")
         end_datetime = f"{end_date_str} 23:59:59"
-        query = f"SELECT timestamp, temperature, humidity FROM sensor_data WHERE device_id = ? AND timestamp BETWEEN datetime(?, {time_modifier}) AND ? ORDER BY timestamp ASC"
+        query = f"SELECT {columns} FROM sensor_data WHERE device_id = ? AND timestamp BETWEEN datetime(?, {time_modifier}) AND ? ORDER BY timestamp ASC"
         history = conn.execute(query, (device_id, end_datetime, end_datetime)).fetchall()
         
     conn.close()
     return jsonify([dict(row) for row in history])
+
+@dashboard_bp.route('/api/plant-analysis-history/<managed_plant_id>')
+@requires_auth
+def api_plant_analysis_history(managed_plant_id):
+    """
+    指定された管理植物の日別集計データを返すAPI。
+    sensor_dataテーブルから直接集計する。
+    """
+    period = request.args.get('period', '7d')
+    
+    conn = dm.get_db_connection()
+    
+    # managed_plantから紐づくセンサーIDを取得
+    plant_info = conn.execute("SELECT assigned_plant_sensor_id, assigned_switchbot_id FROM managed_plants WHERE managed_plant_id = ?", (managed_plant_id,)).fetchone()
+    if not plant_info:
+        conn.close()
+        return jsonify({"error": "Plant not found"}), 404
+        
+    # プライマリセンサーを決定（土壌センサー優先）
+    device_id = plant_info['assigned_plant_sensor_id'] or plant_info['assigned_switchbot_id']
+    if not device_id:
+        conn.close()
+        return jsonify([]) # データなし
+
+    # 期間に応じて開始日を計算
+    today = date.today()
+    if period == '7d':
+        start_date = today - timedelta(days=7)
+    elif period == '30d':
+        start_date = today - timedelta(days=30)
+    elif period == '1y':
+        start_date = today - timedelta(days=365)
+    else:
+        start_date = today - timedelta(days=7) # Default to 7d
+    
+    start_date_str = start_date.strftime('%Y-%m-%d')
+
+    # sensor_dataから日別に集計
+    query = """
+        SELECT
+            date(timestamp) as analysis_date,
+            MAX(temperature) as daily_temp_max,
+            MIN(temperature) as daily_temp_min,
+            AVG(humidity) as daily_humidity_avg,
+            AVG(light_lux) as daily_light_avg,
+            AVG(soil_moisture) as daily_soil_avg
+        FROM sensor_data
+        WHERE device_id = ? AND date(timestamp) >= ?
+        GROUP BY date(timestamp)
+        ORDER BY analysis_date ASC
+    """
+    
+    history = conn.execute(query, (device_id, start_date_str)).fetchall()
+    conn.close()
+    
+    return jsonify([dict(row) for row in history])
+
 
 @dashboard_bp.route('/stream')
 @requires_auth

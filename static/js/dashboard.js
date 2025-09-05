@@ -1,35 +1,24 @@
 // plant_dashboard/static/js/dashboard.js
 
+/**
+ * ダッシュボードページ固有の機能を初期化します。
+ * (日付ピッカー、リアルタイム更新)
+ */
 function initializeDashboard() {
     const pageContainer = document.getElementById('dashboard-page');
     if (!pageContainer) return;
 
-    const selectedDate = pageContainer.dataset.selectedDate;
     const isToday = pageContainer.dataset.isToday === 'True';
-    const chartInstances = {};
 
+    // 日付ピッカーのイベントリスナーを設定
     const datePicker = document.getElementById('dashboard-date-picker');
     if (datePicker) {
         datePicker.addEventListener('change', (e) => {
             window.location.href = `/?date=${e.target.value}`;
         });
     }
-
-    const chartCanvases = document.querySelectorAll('canvas[id^="history-chart-"]');
-    chartCanvases.forEach(canvas => {
-        const deviceId = canvas.id.replace('history-chart-', '');
-        updateHistoryChart(deviceId, '24h', chartInstances, selectedDate);
-    });
-
-    document.querySelectorAll('.period-btn').forEach(button => {
-        button.addEventListener('click', (e) => {
-            const { deviceId, period } = e.target.dataset;
-            document.querySelectorAll(`.period-btn[data-device-id="${deviceId}"]`).forEach(btn => btn.classList.remove('active'));
-            e.target.classList.add('active');
-            updateHistoryChart(deviceId, period, chartInstances, selectedDate);
-        });
-    });
-
+    
+    // 今日の日付が表示されている場合のみ、リアルタイム更新を有効化
     if (isToday) {
         const eventSource = new EventSource("/stream");
         eventSource.onmessage = function(event) {
@@ -38,6 +27,41 @@ function initializeDashboard() {
         };
     }
 }
+
+
+/**
+ * ページ上のすべての履歴グラフを初期化します。
+ * ダッシュボードと詳細ページの両方で呼び出されます。
+ */
+function initializePageCharts() {
+    const dashboardPage = document.getElementById('dashboard-page');
+    const detailPage = document.getElementById('plant-detail-page');
+
+    // どちらのページでもなければ何もしない
+    if (!dashboardPage && !detailPage) return;
+
+    const pageContainer = dashboardPage || detailPage;
+    const chartInstances = {};
+    
+    // ダッシュボードでは選択された日付を、詳細ページでは常に今日の日付を使用
+    const dateForChart = pageContainer.dataset.selectedDate || new Date().toISOString().split('T')[0];
+
+    const chartCanvases = pageContainer.querySelectorAll('canvas[id^="history-chart-"]');
+    chartCanvases.forEach(canvas => {
+        const deviceId = canvas.id.replace('history-chart-', '');
+        updateHistoryChart(deviceId, '24h', chartInstances, dateForChart);
+    });
+
+    pageContainer.querySelectorAll('.period-btn').forEach(button => {
+        button.addEventListener('click', (e) => {
+            const { deviceId, period } = e.target.dataset;
+            pageContainer.querySelectorAll(`.period-btn[data-device-id="${deviceId}"]`).forEach(btn => btn.classList.remove('active'));
+            e.target.classList.add('active');
+            updateHistoryChart(deviceId, period, chartInstances, dateForChart);
+        });
+    });
+}
+
 
 async function updateHistoryChart(deviceId, period, chartInstances, selectedDate) {
     const canvas = document.getElementById(`history-chart-${deviceId}`);
@@ -70,39 +94,81 @@ async function updateHistoryChart(deviceId, period, chartInstances, selectedDate
         if (period === '7d' || period === '30d') timeUnit = 'day';
         else if (period === '1y') timeUnit = 'month';
 
+        // --- ▼▼▼ MODIFICATION START ▼▼▼ ---
+
+        // データセットを動的に構築
+        const datasets = [{
+            label: 'Temperature (°C)',
+            data: historyData.map(d => d.temperature),
+            borderColor: 'rgba(220, 53, 69, 0.8)',
+            yAxisID: 'y_temp',
+            tension: 0.2,
+        }, {
+            label: 'Humidity (%)',
+            data: historyData.map(d => d.humidity),
+            borderColor: 'rgba(13, 110, 253, 0.8)',
+            yAxisID: 'y_humid',
+            tension: 0.2,
+        }];
+
+        const scales = {
+            x: {
+                type: 'time',
+                time: { unit: timeUnit, tooltipFormat: 'yyyy/MM/dd HH:mm' },
+            },
+            y_temp: { position: 'left', title: { display: true, text: 'Temperature (°C)' } },
+            y_humid: { position: 'right', title: { display: true, text: 'Humidity (%)' }, grid: { drawOnChartArea: false } }
+        };
+
+        // 土壌センサーのデータ（照度、土壌水分）が存在する場合、グラフに追加
+        if (historyData.some(d => d.light_lux !== null || d.soil_moisture !== null)) {
+            datasets.push({
+                label: 'Light (lux)',
+                data: historyData.map(d => d.light_lux),
+                borderColor: 'rgba(255, 206, 86, 0.8)',
+                yAxisID: 'y_light',
+                tension: 0.2,
+            });
+            datasets.push({
+                label: 'Soil Moisture',
+                data: historyData.map(d => d.soil_moisture),
+                borderColor: 'rgba(139, 69, 19, 0.8)',
+                yAxisID: 'y_soil',
+                tension: 0.2,
+            });
+
+            scales.y_light = { 
+                position: 'right', 
+                title: { display: true, text: 'Light (lux)' }, 
+                grid: { drawOnChartArea: false },
+                ticks: {
+                    callback: function(value) {
+                        if (value >= 1000) return (value / 1000) + 'k';
+                        return value;
+                    }
+                }
+            };
+            scales.y_soil = { 
+                position: 'right', 
+                title: { display: true, text: 'Soil Moisture' }, 
+                grid: { drawOnChartArea: false } 
+            };
+        }
+
         chartInstances[deviceId] = new Chart(ctx, {
             type: 'line',
             data: {
                 labels: labels,
-                datasets: [
-                    {
-                        label: 'Temperature (°C)',
-                        data: historyData.map(d => d.temperature),
-                        borderColor: 'rgba(220, 53, 69, 0.8)',
-                        yAxisID: 'y_temp',
-                        tension: 0.2,
-                    },
-                    {
-                        label: 'Humidity (%)',
-                        data: historyData.map(d => d.humidity),
-                        borderColor: 'rgba(13, 110, 253, 0.8)',
-                        yAxisID: 'y_humid',
-                        tension: 0.2,
-                    }
-                ]
+                datasets: datasets
             },
             options: {
-                responsive: true, maintainAspectRatio: false,
-                scales: {
-                    x: {
-                        type: 'time',
-                        time: { unit: timeUnit, tooltipFormat: 'yyyy/MM/dd HH:mm' },
-                    },
-                    y_temp: { position: 'left', title: { display: true, text: 'Temperature (°C)' } },
-                    y_humid: { position: 'right', title: { display: true, text: 'Humidity (%)' }, grid: { drawOnChartArea: false } }
-                }
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: scales
             }
         });
+        // --- ▲▲▲ MODIFICATION END ▲▲▲ ---
+
     } catch (error) {
         console.error(`Chart update error for ${deviceId}:`, error);
         ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -155,3 +221,4 @@ function updateElementText(id, text) {
         element.textContent = text;
     }
 }
+
