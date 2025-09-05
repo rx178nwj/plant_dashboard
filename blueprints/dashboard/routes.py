@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, jsonify, Response
+from flask import Blueprint, render_template, request, jsonify, Response, abort
 from datetime import date
 import json
 import time
@@ -30,7 +30,6 @@ def requires_auth(f):
 def get_plant_centric_data(selected_date_str):
     """
     管理されている植物を中心としたダッシュボード用のデータを集約して取得する。
-    Soil Sensorが割り当てられている場合は、そのデータを優先的に使用する。
     """
     conn = dm.get_db_connection()
     
@@ -38,7 +37,7 @@ def get_plant_centric_data(selected_date_str):
         SELECT
             mp.managed_plant_id, mp.plant_name, mp.library_plant_id,
             mp.assigned_plant_sensor_id, mp.assigned_switchbot_id,
-            p.genus, p.species, p.image_url
+            p.genus, p.species, p.variety, p.image_url
         FROM managed_plants mp
         LEFT JOIN plants p ON mp.library_plant_id = p.plant_id
         ORDER BY mp.plant_name
@@ -62,7 +61,6 @@ def get_plant_centric_data(selected_date_str):
         plant_data['sensors'] = {}
         sensor_data = None
 
-        # 土壌センサーが割り当てられている場合、それを最優先
         if plant_data['assigned_plant_sensor_id']:
             sensor_data = conn.execute("""
                 SELECT s.temperature, s.humidity, s.light_lux, s.soil_moisture, d.battery_level, s.timestamp
@@ -72,7 +70,6 @@ def get_plant_centric_data(selected_date_str):
             """, (plant_data['assigned_plant_sensor_id'], end_of_day_str)).fetchone()
             plant_data['sensors']['source'] = 'soil_sensor'
 
-        # 土壌センサーのデータがない、または割り当てられていない場合、環境センサーをフォールバックとして使用
         if not sensor_data and plant_data['assigned_switchbot_id']:
             sensor_data = conn.execute("""
                 SELECT s.temperature, s.humidity, d.battery_level, s.timestamp
@@ -110,6 +107,72 @@ def dashboard():
                            active_page='dashboard',
                            selected_date=selected_date_str,
                            is_today=(selected_date_str == today_str))
+
+@dashboard_bp.route('/plant/<managed_plant_id>')
+@requires_auth
+def plant_detail(managed_plant_id):
+    """個別の植物詳細ページを表示する"""
+    conn = dm.get_db_connection()
+
+    # プラントの基本情報を取得 (ライブラリの全情報を取得するよう修正)
+    plant_info_query = """
+        SELECT
+            mp.managed_plant_id, mp.plant_name, mp.library_plant_id,
+            mp.assigned_plant_sensor_id, mp.assigned_switchbot_id,
+            p.*
+        FROM managed_plants mp
+        LEFT JOIN plants p ON mp.library_plant_id = p.plant_id
+        WHERE mp.managed_plant_id = ?
+    """
+    plant_row = conn.execute(plant_info_query, (managed_plant_id,)).fetchone()
+
+    if plant_row is None:
+        conn.close()
+        abort(404, description="指定された植物が見つかりません。")
+
+    plant_data = dict(plant_row)
+
+    # 最新のセンサーデータと分析結果を取得（本日を基準）
+    today_str = date.today().isoformat()
+    end_of_day_str = f"{today_str} 23:59:59"
+
+    analysis = conn.execute("""
+        SELECT growth_period, watering_advice
+        FROM daily_plant_analysis
+        WHERE managed_plant_id = ? AND analysis_date <= ?
+        ORDER BY analysis_date DESC LIMIT 1
+    """, (managed_plant_id, today_str)).fetchone()
+    plant_data['analysis'] = dict(analysis) if analysis else {}
+
+    plant_data['sensors'] = {}
+    sensor_data = None
+    if plant_data.get('assigned_plant_sensor_id'):
+        sensor_data = conn.execute("""
+            SELECT temperature, humidity, light_lux, soil_moisture FROM sensor_data
+            WHERE device_id = ? AND timestamp <= ? ORDER BY timestamp DESC LIMIT 1
+        """, (plant_data['assigned_plant_sensor_id'], end_of_day_str)).fetchone()
+
+    if not sensor_data and plant_data.get('assigned_switchbot_id'):
+        sensor_data = conn.execute("""
+            SELECT temperature, humidity FROM sensor_data
+            WHERE device_id = ? AND timestamp <= ? ORDER BY timestamp DESC LIMIT 1
+        """, (plant_data['assigned_switchbot_id'], end_of_day_str)).fetchone()
+
+    plant_data['sensors']['primary'] = dict(sensor_data) if sensor_data else {}
+
+    # 日毎の履歴データをすべて取得
+    daily_history = conn.execute("""
+        SELECT * FROM daily_plant_analysis
+        WHERE managed_plant_id = ? ORDER BY analysis_date DESC
+    """, (managed_plant_id,)).fetchall()
+
+    conn.close()
+
+    return render_template('plant_detail.html',
+                           plant=plant_data,
+                           daily_history=daily_history,
+                           active_page='dashboard')
+
 
 @dashboard_bp.route('/api/history/<device_id>')
 @requires_auth
