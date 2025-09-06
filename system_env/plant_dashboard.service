@@ -7,8 +7,7 @@ User=pi
 Group=pi
 WorkingDirectory=/home/pi/plant_dashboard
 EnvironmentFile=/home/pi/plant_dashboard/.env
-ExecStart=/home/pi/plant_dashboard/.venv/bin/gunicorn --workers=1 --worker-class gevent --timeout 120 --bind 0.0.0.0:8000 wsgi:app
-Restart=always
+ExecStart=/home/pi/plant_dashboard/.venv/bin/gunicorn --workers=4 --threads=4 --bind 0.0.0.0:8000 wsgi:app
 RestartSec=10
 StandardOutput=journal
 StandardError=journal

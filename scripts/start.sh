@@ -4,6 +4,7 @@
 cd "$(dirname "$0")/.."
 
 echo "--- copy services ---"
+sudo cp system_env/plant_dashboard.service /etc/systemd/system
 sudo cp system_env/plant_dashboard-daemon.service /etc/systemd/system
 sudo cp system_env/plant_analyzer_daemon.service /etc/systemd/system
 
@@ -11,6 +12,7 @@ echo "--- Enabling and starting systemd services ---"
 
 # 既存のデーモンを停止
 sudo systemctl stop plant_dashboard-daemon.service
+sudo systemctl stop plant_dashboard.service
 
 # systemdに設定の変更を通知
 sudo systemctl daemon-reload
