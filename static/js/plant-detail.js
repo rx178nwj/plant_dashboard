@@ -10,20 +10,38 @@ function initializeDetailCharts() {
     const managedPlantId = pageContainer.dataset.plantId;
     const analysisChartInstances = {};
     const sensorChartInstances = {};
+    const initialDate = pageContainer.dataset.selectedDate || new Date().toISOString().split('T')[0];
 
     // --- 1. 日別集計グラフの初期化 ---
     const analysisChartCanvas = document.getElementById(`analysis-history-chart-${managedPlantId}`);
     if (analysisChartCanvas) {
-        updateAnalysisHistoryChart(managedPlantId, '7d', analysisChartInstances);
+        const analysisDatePicker = document.getElementById(`analysis-date-picker-${managedPlantId}`);
+        if (analysisDatePicker) {
+            analysisDatePicker.value = initialDate;
+        }
+
+        const updateChartFromAnalysisControls = () => {
+            const selectedPeriodButton = pageContainer.querySelector(`.analysis-period-btn[data-plant-id="${managedPlantId}"].active`);
+            if (!selectedPeriodButton) return;
+            const selectedPeriod = selectedPeriodButton.dataset.period;
+            const selectedDate = analysisDatePicker ? analysisDatePicker.value : initialDate;
+            updateAnalysisHistoryChart(managedPlantId, selectedPeriod, analysisChartInstances, selectedDate);
+        };
+        
+        updateAnalysisHistoryChart(managedPlantId, '7d', analysisChartInstances, initialDate);
 
         pageContainer.querySelectorAll('.analysis-period-btn').forEach(button => {
             button.addEventListener('click', (e) => {
-                const { plantId, period } = e.target.dataset;
+                const { plantId } = e.target.dataset;
                 pageContainer.querySelectorAll(`.analysis-period-btn[data-plant-id="${plantId}"]`).forEach(btn => btn.classList.remove('active'));
                 e.target.classList.add('active');
-                updateAnalysisHistoryChart(plantId, period, analysisChartInstances);
+                updateChartFromAnalysisControls();
             });
         });
+
+        if (analysisDatePicker) {
+            analysisDatePicker.addEventListener('change', updateChartFromAnalysisControls);
+        }
         
         const analysisOptionsContainer = document.getElementById(`analysis-chart-options-${managedPlantId}`);
         if (analysisOptionsContainer) {
@@ -59,18 +77,33 @@ function initializeDetailCharts() {
     const sensorChartCanvas = pageContainer.querySelector('canvas[id^="history-chart-"]');
     if (sensorChartCanvas) {
         const deviceId = sensorChartCanvas.id.replace('history-chart-', '');
-        const dateForChart = pageContainer.dataset.selectedDate || new Date().toISOString().split('T')[0];
+        const datePicker = document.getElementById(`sensor-date-picker-${deviceId}`);
         
-        updateSensorHistoryChart(deviceId, '24h', sensorChartInstances, dateForChart);
-
-        pageContainer.querySelectorAll('.period-btn').forEach(button => {
+        if (datePicker) {
+            datePicker.value = initialDate;
+        }
+        
+        updateSensorHistoryChart(deviceId, '24h', sensorChartInstances, initialDate);
+    
+        const updateChartFromSensorControls = () => {
+            const selectedPeriodButton = pageContainer.querySelector(`.period-btn[data-device-id="${deviceId}"].active`);
+            if (!selectedPeriodButton) return;
+            const selectedPeriod = selectedPeriodButton.dataset.period;
+            const selectedDate = datePicker ? datePicker.value : initialDate;
+            updateSensorHistoryChart(deviceId, selectedPeriod, sensorChartInstances, selectedDate);
+        };
+    
+        pageContainer.querySelectorAll(`.period-btn[data-device-id="${deviceId}"]`).forEach(button => {
             button.addEventListener('click', (e) => {
-                const { deviceId, period } = e.target.dataset;
                 pageContainer.querySelectorAll(`.period-btn[data-device-id="${deviceId}"]`).forEach(btn => btn.classList.remove('active'));
                 e.target.classList.add('active');
-                updateSensorHistoryChart(deviceId, period, sensorChartInstances, dateForChart);
+                updateChartFromSensorControls();
             });
         });
+    
+        if (datePicker) {
+            datePicker.addEventListener('change', updateChartFromSensorControls);
+        }
     }
 }
 
@@ -78,7 +111,7 @@ function initializeDetailCharts() {
 /**
  * 日別集計データ（`daily_plant_analysis`）をグラフに描画します。
  */
-async function updateAnalysisHistoryChart(managedPlantId, period, chartInstances) {
+async function updateAnalysisHistoryChart(managedPlantId, period, chartInstances, selectedDate) {
     const canvas = document.getElementById(`analysis-history-chart-${managedPlantId}`);
     const loader = document.getElementById(`analysis-chart-loader-${managedPlantId}`);
     const optionsContainer = document.getElementById(`analysis-chart-options-${managedPlantId}`);
@@ -92,9 +125,8 @@ async function updateAnalysisHistoryChart(managedPlantId, period, chartInstances
     canvas.style.visibility = 'hidden';
     if (optionsContainer) optionsContainer.style.display = 'none';
 
-
     try {
-        const response = await fetch(`/api/plant-analysis-history/${managedPlantId}?period=${period}`);
+        const response = await fetch(`/api/plant-analysis-history/${managedPlantId}?period=${period}&date=${selectedDate}`);
         if (!response.ok) throw new Error(`API request failed`);
         
         const responseData = await response.json();

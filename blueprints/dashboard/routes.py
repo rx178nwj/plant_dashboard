@@ -221,6 +221,7 @@ def api_plant_analysis_history(managed_plant_id):
     指定された管理植物の日別集計データと、関連する閾値を返すAPI。
     """
     period = request.args.get('period', '7d')
+    end_date_str = request.args.get('date', date.today().isoformat())
     conn = dm.get_db_connection()
 
     # Get plant library thresholds
@@ -239,15 +240,15 @@ def api_plant_analysis_history(managed_plant_id):
     thresholds = dict(thresholds_row) if thresholds_row else {}
 
     # 期間に応じて開始日を計算
-    today = date.today()
+    end_date = date.fromisoformat(end_date_str)
     if period == '7d':
-        start_date = today - timedelta(days=7)
+        start_date = end_date - timedelta(days=6)
     elif period == '30d':
-        start_date = today - timedelta(days=30)
+        start_date = end_date - timedelta(days=29)
     elif period == '1y':
-        start_date = today - timedelta(days=365)
+        start_date = end_date - timedelta(days=364)
     else: # Default
-        start_date = today - timedelta(days=7)
+        start_date = end_date - timedelta(days=6)
     
     start_date_str = start_date.strftime('%Y-%m-%d')
 
@@ -260,11 +261,11 @@ def api_plant_analysis_history(managed_plant_id):
             daily_light_max, daily_light_min, daily_light_ave,
             daily_soil_moisture_max, daily_soil_moisture_min, daily_soil_moisture_ave
         FROM daily_plant_analysis
-        WHERE managed_plant_id = ? AND analysis_date >= ?
+        WHERE managed_plant_id = ? AND analysis_date BETWEEN ? AND ?
         ORDER BY analysis_date ASC
     """
     
-    history = conn.execute(query, (managed_plant_id, start_date_str)).fetchall()
+    history = conn.execute(query, (managed_plant_id, start_date_str, end_date_str)).fetchall()
     conn.close()
     
     response_data = {
@@ -294,7 +295,3 @@ def stream():
             time.sleep(5)
             
     return Response(event_stream(), mimetype='text/event-stream')
-
-
-
-

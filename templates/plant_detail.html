@@ -162,11 +162,19 @@
                          <div class="card-header"><h5 class="mb-0"><i class="bi bi-graph-up-arrow"></i> Daily Aggregates</h5></div>
                         <div class="card-body">
                             {% set managed_id = plant.managed_plant_id %}
-                            <div class="btn-group btn-group-sm mb-3" role="group">
-                                <button type="button" class="btn btn-outline-secondary analysis-period-btn active" data-period="7d" data-plant-id="{{ managed_id }}">1W</button>
-                                <button type="button" class="btn btn-outline-secondary analysis-period-btn" data-period="30d" data-plant-id="{{ managed_id }}">1M</button>
-                                <button type="button" class="btn btn-outline-secondary analysis-period-btn" data-period="1y" data-plant-id="{{ managed_id }}">1Y</button>
+                            <!-- ▼▼▼ MODIFIED: Add Date Picker and Reorganize Controls ▼▼▼ -->
+                            <div class="d-flex justify-content-between align-items-center flex-wrap mb-3">
+                                <div class="btn-group btn-group-sm" role="group">
+                                    <button type="button" class="btn btn-outline-secondary analysis-period-btn active" data-period="7d" data-plant-id="{{ managed_id }}">1W</button>
+                                    <button type="button" class="btn btn-outline-secondary analysis-period-btn" data-period="30d" data-plant-id="{{ managed_id }}">1M</button>
+                                    <button type="button" class="btn btn-outline-secondary analysis-period-btn" data-period="1y" data-plant-id="{{ managed_id }}">1Y</button>
+                                </div>
+                                <div class="d-flex align-items-center mt-2 mt-md-0">
+                                    <label for="analysis-date-picker-{{ managed_id }}" class="col-form-label-sm me-2">End Date:</label>
+                                    <input type="date" id="analysis-date-picker-{{ managed_id }}" class="form-control form-control-sm" style="width: auto;">
+                                </div>
                             </div>
+                            <!-- ▲▲▲ END Controls ▲▲▲ -->
                             <div class="d-flex flex-wrap justify-content-center small mb-2 analysis-chart-options" id="analysis-chart-options-{{ managed_id }}" style="display: none;">
                                 <div class="form-check form-switch me-3">
                                     <input class="form-check-input" type="checkbox" role="switch" id="toggle-analysis-temp_range-{{ managed_id }}" data-dataset-label="Temp Range" checked>
@@ -212,12 +220,20 @@
                          <div class="card-header"><h5 class="mb-0"><i class="bi bi-graph-up"></i> Sensor Graph</h5></div>
                         <div class="card-body">
                             {% set device_id_to_chart = plant.assigned_plant_sensor_id or plant.assigned_switchbot_id %}
-                            <div class="btn-group btn-group-sm mb-3" role="group">
-                                <button type="button" class="btn btn-outline-secondary period-btn active" data-period="24h" data-device-id="{{ device_id_to_chart }}">24H</button>
-                                <button type="button" class="btn btn-outline-secondary period-btn" data-period="7d" data-device-id="{{ device_id_to_chart }}">7D</button>
-                                <button type="button" class="btn btn-outline-secondary period-btn" data-period="30d" data-device-id="{{ device_id_to_chart }}">1M</button>
-                                <button type="button" class="btn btn-outline-secondary period-btn" data-period="1y" data-device-id="{{ device_id_to_chart }}">1Y</button>
+                            <!-- ▼▼▼ MODIFIED: Add Date Picker and Reorganize Controls ▼▼▼ -->
+                            <div class="d-flex justify-content-between align-items-center flex-wrap mb-3">
+                                <div class="btn-group btn-group-sm" role="group">
+                                    <button type="button" class="btn btn-outline-secondary period-btn active" data-period="24h" data-device-id="{{ device_id_to_chart }}">24H</button>
+                                    <button type="button" class="btn btn-outline-secondary period-btn" data-period="7d" data-device-id="{{ device_id_to_chart }}">7D</button>
+                                    <button type="button" class="btn btn-outline-secondary period-btn" data-period="30d" data-device-id="{{ device_id_to_chart }}">1M</button>
+                                    <button type="button" class="btn btn-outline-secondary period-btn" data-period="1y" data-device-id="{{ device_id_to_chart }}">1Y</button>
+                                </div>
+                                <div class="d-flex align-items-center mt-2 mt-md-0">
+                                    <label for="sensor-date-picker-{{ device_id_to_chart }}" class="col-form-label-sm me-2">Date:</label>
+                                    <input type="date" id="sensor-date-picker-{{ device_id_to_chart }}" class="form-control form-control-sm" style="width: auto;">
+                                </div>
                             </div>
+                            <!-- ▲▲▲ END Controls ▲▲▲ -->
                             <div class="d-flex flex-wrap justify-content-center small mb-2 chart-options" id="chart-options-{{ device_id_to_chart }}" style="display: none;">
                                 <div class="form-check form-switch me-3">
                                     <input class="form-check-input" type="checkbox" role="switch" id="toggle-fast_growth-{{ device_id_to_chart }}" data-dataset-label="Fast Growth Range" checked>
