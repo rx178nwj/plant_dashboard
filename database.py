@@ -65,6 +65,19 @@ def init_db():
         analysis_date DATE NOT NULL,
         daily_temp_max REAL,
         daily_temp_min REAL,
+        daily_temp_ave REAL,
+        daily_humidity_max REAL,
+        daily_humidity_min REAL,
+        daily_humidity_ave REAL,
+        daily_light_max REAL,
+        daily_light_min REAL,
+        daily_light_ave REAL,
+        daily_soil_moisture_max REAL,
+        daily_soil_moisture_min REAL,
+        daily_soil_moisture_ave REAL,
+        daily_watering_events INTEGER,
+        daily_watering_volume REAL,
+        daily_watering_duration INTEGER,
         growth_period TEXT,
         survival_limit_status TEXT,
         watering_advice TEXT,
@@ -73,6 +86,33 @@ def init_db():
         FOREIGN KEY (managed_plant_id) REFERENCES managed_plants(managed_plant_id)
     );
     """)
+
+    # 追加したいカラムのリスト create table時にまとめて追加する形に変更したため、以下のコードはコメントアウト
+    #columns_to_add = [
+    #    "daily_temp_ave REAL",
+    #    "daily_humidity_max REAL",
+    #    "daily_humidity_min REAL",
+    #    "daily_humidity_ave REAL",
+    #    "daily_light_max REAL",
+    #    "daily_light_min REAL",
+    #    "daily_light_ave REAL",
+    #    "daily_soil_moisture_max REAL",
+    #    "daily_soil_moisture_min REAL",
+    #    "daily_soil_moisture_ave REAL",
+    #    "daily_watering_events INTEGER",
+    #   "daily_watering_volume REAL",
+    #    "daily_watering_duration INTEGER"
+    #]
+    # 各カラムを一つずつ追加していく
+    #for column_definition in columns_to_add:
+    #    try:
+    #        # ALTER TABLE文を構築して実行
+    #        sql_command = f"ALTER TABLE daily_plant_analysis ADD COLUMN {column_definition};"
+    #        cursor.execute(sql_command)
+    #        print(f"カラム '{column_definition}' を追加しました。")
+    #    except sqlite3.OperationalError as e:
+    #        # カラムが既に存在する場合のエラーを無視して次に進む
+    #        print(f"カラム '{column_definition}' の追加に失敗しました: {e}")
 
     conn.commit()
     conn.close()

@@ -13,3 +13,6 @@ Thumbs.db
 __pycache__/
 *.db__pycache__/
 *.pyc
+*/*.pyc
+*.pyo
+*.pyd
