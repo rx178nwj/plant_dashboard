@@ -11,6 +11,8 @@ from database import init_db, get_db_connection
 from plant_logic import PlantStateAnalyzer
 
 DATA_PIPE_PATH = "/tmp/plant_dashboard_pipe.jsonl"
+# データ取り込みの間隔（秒）
+DATA_FETCH_INTERVAL_SECONDS = 60  # 1分
 # 1時間ごとに分析を実行
 ANALYSIS_INTERVAL_SECONDS = 3600
 
@@ -41,12 +43,12 @@ def process_data_pipe():
         for line in f:
             try:
                 record = json.loads(line.strip())
-                device_id, sensor_data = record.get("device_id"), record.get("data")
+                device_id, timestamp, sensor_data = record.get("device_id"), record.get("timestamp"),  record.get("data")
                 
                 if record.get("error"):
                     dm.update_device_status(device_id, 'error')
                 elif sensor_data:
-                    dm.save_sensor_data(device_id, sensor_data)
+                    dm.save_sensor_data(device_id, timestamp, sensor_data)
                     dm.update_device_status(device_id, 'connected', sensor_data.get('battery_level'))
                 else:
                     dm.update_device_status(device_id, 'disconnected')
@@ -79,27 +81,56 @@ def main_loop():
     
     init_db()
 
+    # --- 設定値 ---
+    # データ取り込みの間隔（秒）
+    #DATA_FETCH_INTERVAL_SECONDS = 60  # 1分
+    # 分析実行の間隔（秒）
+    #ANALYSIS_INTERVAL_SECONDS = 3600 # 1時間
+
+    # 最後に分析処理を実行した時刻を記録する変数
+    # プログラム起動後、すぐに初回の分析が実行されるように初期値は0にしておきます
+    last_analysis_execution_time = 0
+
     while True:
-        # --- ① Bluetoothデーモンからのデータを取り込む ---
+        # ループの開始時刻を記録
+        loop_start_time = time.time()
+
+        # --- ① Bluetoothデーモンからのデータを取り込む (毎分実行) ---
+        logger.info("Processing data from pipe...")
         process_data_pipe()
 
-        current_date = date.today()
-        
-        # --- ② 日付が変わり、最初の実行かチェック ---
-        if last_processed_date != current_date:
-            yesterday = current_date - timedelta(days=1)
-            # 初回起動時以外は、前日分の分析を最終確定させる
-            if last_processed_date is not None:
-                 logger.info(f"New day detected. Finalizing analysis for {yesterday}...")
-                 run_full_analysis(yesterday)
-            last_processed_date = current_date
+        # --- ② 前回の分析から1時間以上経過したかチェック ---
+        current_time = time.time()
+        if (current_time - last_analysis_execution_time) >= ANALYSIS_INTERVAL_SECONDS:
+            logger.info("Starting hourly analysis process...")
+            
+            # 最後に分析を実行した時刻を現在時刻に更新
+            last_analysis_execution_time = current_time
+            
+            current_date = date.today()
+            
+            # --- ③ 日付が変わり、最初の実行かチェック ---
+            if last_processed_date != current_date:
+                yesterday = current_date - timedelta(days=1)
+                # 初回起動時以外は、前日分の分析を最終確定させる
+                if last_processed_date is not None:
+                    logger.info(f"New day detected. Finalizing analysis for {yesterday}...")
+                    run_full_analysis(yesterday)
+                last_processed_date = current_date
 
-        # --- ③ 1時間ごとに当日の暫定分析を実行 ---
-        logger.info(f"Running hourly analysis for {current_date}...")
-        run_full_analysis(current_date)
-        
-        logger.info(f"Analysis cycle finished. Waiting for {ANALYSIS_INTERVAL_SECONDS} seconds.")
-        time.sleep(ANALYSIS_INTERVAL_SECONDS)
+            # --- ④ 1時間ごとに当日の暫定分析を実行 ---
+            logger.info(f"Running hourly analysis for {current_date}...")
+            run_full_analysis(current_date)
+            
+            logger.info("Hourly analysis finished.")
+
+        # --- 次のデータ取り込みまで待機 ---
+        # 処理にかかった時間を差し引いて、ループ全体が約1分間隔になるよう調整
+        elapsed_time = time.time() - loop_start_time
+        sleep_time = DATA_FETCH_INTERVAL_SECONDS - elapsed_time
+        if sleep_time > 0:
+            logger.info(f"Waiting for {sleep_time:.2f} seconds until next data fetch.")
+            time.sleep(sleep_time)
 
 if __name__ == "__main__":
     try:

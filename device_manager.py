@@ -62,21 +62,32 @@ def update_device_status(device_id, status, battery=None):
         conn.commit()
         conn.close()
 
-def save_sensor_data(device_id, data):
+def save_sensor_data(device_id, timestamp, data):
     """センサーデータをDBに保存します。タイムスタンプはアプリケーションの現在時刻を明示的に使用します。"""
     if not data:
         return
     conn = get_db_connection()
-    # タイムゾーンを指定して現在時刻を生成
-    now_timestamp = datetime.now(JST).strftime("%Y-%m-%d %H:%M:%S")
+    formatted_timestamp = ""
+    if timestamp:
+        # ISO形式の文字列をdatetimeオブジェクトにパースし、指定の形式に再フォーマット
+        try:
+            dt_object = datetime.fromisoformat(timestamp)
+            formatted_timestamp = dt_object.strftime("%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            # 既に正しい形式の場合や、他の形式で来た場合のエラーハンドリング
+            formatted_timestamp = timestamp
+    else:
+        # タイムスタンプが提供されていなければ、現在時刻を生成
+        formatted_timestamp = datetime.now(JST).strftime("%Y-%m-%d %H:%M:%S")
+
     try:
         conn.execute(
             # timestampカラムを明示的に指定してINSERT
             "INSERT INTO sensor_data (device_id, timestamp, temperature, humidity, light_lux, soil_moisture) VALUES (?, ?, ?, ?, ?, ?)",
-            (device_id, now_timestamp, data.get('temperature'), data.get('humidity'), data.get('light_lux'), data.get('soil_moisture'))
+            (device_id, formatted_timestamp, data.get('temperature'), data.get('humidity'), data.get('light_lux'), data.get('soil_moisture'))
         )
         conn.commit()
-        logger.info(f"Saved sensor data for {device_id} at {now_timestamp}")
+        logger.info(f"Saved sensor data for {device_id} at {data.get('timestamp')}")
     except sqlite3.Error as e:
         logger.error(f"Failed to save sensor data for {device_id}: {e}")
     finally:
