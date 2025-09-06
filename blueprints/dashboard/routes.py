@@ -162,11 +162,35 @@ def plant_detail(managed_plant_id):
 @dashboard_bp.route('/api/history/<device_id>')
 @requires_auth
 def api_history(device_id):
-    """デバイスの履歴データを返すAPI"""
+    """デバイスの履歴データと、関連する植物の閾値を返すAPI"""
     period = request.args.get('period', '24h')
     end_date_str = request.args.get('date', date.today().isoformat())
     
     conn = dm.get_db_connection()
+
+    # Find the managed plant associated with this device to get thresholds
+    managed_plant = conn.execute("""
+        SELECT mp.managed_plant_id
+        FROM managed_plants mp
+        WHERE mp.assigned_plant_sensor_id = ? OR mp.assigned_switchbot_id = ?
+        LIMIT 1
+    """, (device_id, device_id)).fetchone()
+
+    thresholds = {}
+    if managed_plant:
+        thresholds_row = conn.execute("""
+            SELECT
+                p.lethal_temp_high, p.lethal_temp_low,
+                p.growing_fast_temp_high, p.growing_fast_temp_low,
+                p.growing_slow_temp_high, p.growing_slow_temp_low,
+                p.hot_dormancy_temp_high, p.hot_dormancy_temp_low,
+                p.cold_dormancy_temp_high, p.cold_dormancy_temp_low
+            FROM plants p
+            JOIN managed_plants mp ON p.plant_id = mp.library_plant_id
+            WHERE mp.managed_plant_id = ?
+        """, (managed_plant['managed_plant_id'],)).fetchone()
+        if thresholds_row:
+            thresholds = dict(thresholds_row)
     
     # 取得するカラムに light_lux と soil_moisture を追加
     columns = "timestamp, temperature, humidity, light_lux, soil_moisture"
@@ -182,30 +206,37 @@ def api_history(device_id):
         history = conn.execute(query, (device_id, end_datetime, end_datetime)).fetchall()
         
     conn.close()
-    return jsonify([dict(row) for row in history])
+    
+    response_data = {
+        "history": [dict(row) for row in history],
+        "thresholds": thresholds
+    }
+    
+    return jsonify(response_data)
 
 @dashboard_bp.route('/api/plant-analysis-history/<managed_plant_id>')
 @requires_auth
 def api_plant_analysis_history(managed_plant_id):
     """
-    指定された管理植物の日別集計データを返すAPI。
-    sensor_dataテーブルから直接集計する。
+    指定された管理植物の日別集計データと、関連する閾値を返すAPI。
     """
     period = request.args.get('period', '7d')
-    
     conn = dm.get_db_connection()
+
+    # Get plant library thresholds
+    thresholds_row = conn.execute("""
+        SELECT
+            p.lethal_temp_high, p.lethal_temp_low,
+            p.growing_fast_temp_high, p.growing_fast_temp_low,
+            p.growing_slow_temp_high, p.growing_slow_temp_low,
+            p.hot_dormancy_temp_high, p.hot_dormancy_temp_low,
+            p.cold_dormancy_temp_high, p.cold_dormancy_temp_low
+        FROM plants p
+        JOIN managed_plants mp ON p.plant_id = mp.library_plant_id
+        WHERE mp.managed_plant_id = ?
+    """, (managed_plant_id,)).fetchone()
     
-    # managed_plantから紐づくセンサーIDを取得
-    plant_info = conn.execute("SELECT assigned_plant_sensor_id, assigned_switchbot_id FROM managed_plants WHERE managed_plant_id = ?", (managed_plant_id,)).fetchone()
-    if not plant_info:
-        conn.close()
-        return jsonify({"error": "Plant not found"}), 404
-        
-    # プライマリセンサーを決定（土壌センサー優先）
-    device_id = plant_info['assigned_plant_sensor_id'] or plant_info['assigned_switchbot_id']
-    if not device_id:
-        conn.close()
-        return jsonify([]) # データなし
+    thresholds = dict(thresholds_row) if thresholds_row else {}
 
     # 期間に応じて開始日を計算
     today = date.today()
@@ -215,30 +246,33 @@ def api_plant_analysis_history(managed_plant_id):
         start_date = today - timedelta(days=30)
     elif period == '1y':
         start_date = today - timedelta(days=365)
-    else:
-        start_date = today - timedelta(days=7) # Default to 7d
+    else: # Default
+        start_date = today - timedelta(days=7)
     
     start_date_str = start_date.strftime('%Y-%m-%d')
 
-    # sensor_dataから日別に集計
+    # daily_plant_analysisから集計済みデータを取得
     query = """
         SELECT
-            date(timestamp) as analysis_date,
-            MAX(temperature) as daily_temp_max,
-            MIN(temperature) as daily_temp_min,
-            AVG(humidity) as daily_humidity_avg,
-            AVG(light_lux) as daily_light_avg,
-            AVG(soil_moisture) as daily_soil_avg
-        FROM sensor_data
-        WHERE device_id = ? AND date(timestamp) >= ?
-        GROUP BY date(timestamp)
+            analysis_date,
+            daily_temp_max, daily_temp_min, daily_temp_ave,
+            daily_humidity_max, daily_humidity_min, daily_humidity_ave,
+            daily_light_max, daily_light_min, daily_light_ave,
+            daily_soil_moisture_max, daily_soil_moisture_min, daily_soil_moisture_ave
+        FROM daily_plant_analysis
+        WHERE managed_plant_id = ? AND analysis_date >= ?
         ORDER BY analysis_date ASC
     """
     
-    history = conn.execute(query, (device_id, start_date_str)).fetchall()
+    history = conn.execute(query, (managed_plant_id, start_date_str)).fetchall()
     conn.close()
     
-    return jsonify([dict(row) for row in history])
+    response_data = {
+        "history": [dict(row) for row in history],
+        "thresholds": thresholds
+    }
+    
+    return jsonify(response_data)
 
 
 @dashboard_bp.route('/stream')
@@ -260,4 +294,7 @@ def stream():
             time.sleep(5)
             
     return Response(event_stream(), mimetype='text/event-stream')
+
+
+
 

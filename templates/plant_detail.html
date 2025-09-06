@@ -1,220 +1,254 @@
 {% extends "layout.html" %}
 
-{% block title %}{{ plant.plant_name }} - 詳細{% endblock %}
+{% block title %}{{ plant.plant_name }} - Details{% endblock %}
 
 {% block content %}
-<div id="plant-detail-page" data-plant-id="{{ plant.managed_plant_id }}" data-selected-date="{{ plant.sensors.primary.timestamp.split(' ')[0] if plant.sensors.primary.timestamp else '' }}">
+<div id="plant-detail-page" data-plant-id="{{ plant.managed_plant_id }}" data-selected-date="{{ plant.sensors.primary.timestamp.split(' ')[0] if plant.sensors.primary and plant.sensors.primary.timestamp else '' }}">
 
-    <!-- ページヘッダー -->
+    <!-- Page Header -->
     <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
         <div>
             <h1 class="h2">{{ plant.plant_name }}</h1>
             <p class="text-muted mb-0">{{ plant.genus }} {{ plant.species }} {{ plant.variety }}</p>
         </div>
         <a href="{{ url_for('dashboard.dashboard') }}" class="btn btn-outline-secondary">
-            <i class="bi bi-arrow-left"></i> ダッシュボードに戻る
+            <i class="bi bi-arrow-left"></i> Back to Dashboard
         </a>
     </div>
 
     <div class="row">
-        <!-- 左カラム: 画像と現在のステータス -->
+        <!-- Left Column: Image, Status, and Library Info -->
         <div class="col-lg-5 mb-4">
-            <div class="card shadow-sm">
+            <div class="card shadow-sm mb-4">
                 <img src="{{ plant.image_url or 'https://placehold.co/600x400/eeeeee/cccccc?text=No+Image' }}"
                      class="card-img-top"
                      onerror="this.onerror=null;this.src='https://placehold.co/600x400/eeeeee/cccccc?text=No+Image';"
                      alt="{{ plant.plant_name }}">
                 <div class="card-body">
-                    <h5 class="card-title">現在のステータス</h5>
+                    <h5 class="card-title">Current Status</h5>
                     <div class="row text-center sensor-data-grid py-2">
                         {% set sensor_data = plant.sensors.get('primary', {}) %}
                         <div class="col-6 mb-3">
-                            <i class="bi bi-thermometer-half text-danger"></i> 温度<br>
+                            <i class="bi bi-thermometer-half text-danger"></i> Temperature<br>
                             <span class="fs-5 fw-bold">{{ sensor_data.temperature | round(1) if sensor_data and 'temperature' in sensor_data and sensor_data.temperature is not none else '--' }}</span> °C
                         </div>
                         <div class="col-6 mb-3">
-                            <i class="bi bi-droplet-half text-primary"></i> 湿度<br>
+                            <i class="bi bi-droplet-half text-primary"></i> Humidity<br>
                             <span class="fs-5 fw-bold">{{ sensor_data.humidity | round(1) if sensor_data and 'humidity' in sensor_data and sensor_data.humidity is not none else '--' }}</span> %
                         </div>
                         {% if plant.sensors.source == 'soil_sensor' %}
                         <div class="col-6">
-                            <i class="bi bi-brightness-high text-warning"></i> 照度<br>
+                            <i class="bi bi-brightness-high text-warning"></i> Light<br>
                             <span class="fs-5 fw-bold">{{ sensor_data.light_lux | round(1) if sensor_data and 'light_lux' in sensor_data and sensor_data.light_lux is not none else '--' }}</span> lx
                         </div>
                         <div class="col-6">
-                            <i class="bi bi-moisture text-success"></i> 土壌水分<br>
+                            <i class="bi bi-moisture text-success"></i> Soil Moisture<br>
                             <span class="fs-5 fw-bold">{{ sensor_data.soil_moisture if sensor_data and 'soil_moisture' in sensor_data and sensor_data.soil_moisture is not none else '--' }}</span>
                         </div>
                         {% endif %}
                     </div>
                 </div>
                 <div class="card-footer">
-                     <h6 class="card-subtitle mb-2 text-muted small"><i class="bi bi-clipboard-data"></i> 最新の分析</h6>
+                     <h6 class="card-subtitle mb-2 text-muted small"><i class="bi bi-clipboard-data"></i> Latest Analysis</h6>
                      <span class="badge bg-light text-dark me-2">
-                         <i class="bi bi-sun"></i> 成長:
+                         <i class="bi bi-sun"></i> Growth:
                          <strong>{{ plant.analysis.growth_period | replace('_', ' ') | title | default('Unknown') }}</strong>
                      </span>
                      <span class="badge {% if plant.analysis.watering_advice and 'needed' in plant.analysis.watering_advice|lower %}bg-primary text-white{% else %}bg-light text-dark{% endif %}">
-                         <i class="bi bi-water"></i> 水やり:
+                         <i class="bi bi-water"></i> Watering:
                          <strong>{{ plant.analysis.watering_advice | default('N/A') }}</strong>
                      </span>
                 </div>
             </div>
 
-            <!-- ライブラリ情報カード -->
-            <div class="card shadow-sm mt-4">
-                <div class="card-header">
-                    <h5 class="mb-0"><i class="bi bi-book"></i> ライブラリ情報</h5>
-                </div>
-                <div class="card-body">
-                    {% if plant.origin_country %}
-                    <h6 class="card-subtitle mb-2 text-muted">原産地</h6>
-                    <p><strong>国:</strong> {{ plant.origin_country }}<br>
-                       <strong>地域:</strong> {{ plant.origin_region }}</p>
-                    
-                    <div class="map-responsive mb-3">
-                        <iframe
-                            width="100%"
-                            height="250"
-                            frameborder="0" style="border:0; border-radius: 0.25rem;"
-                            src="https://maps.google.com/maps?q={{ plant.origin_region | urlencode }},{{ plant.origin_country | urlencode }}&t=&z=5&ie=UTF8&iwloc=&output=embed"
-                            allowfullscreen>
-                        </iframe>
-                    </div>
-                    <hr>
-                    {% endif %}
+            <!-- Library Info Accordion -->
+            <div class="accordion" id="library-info-accordion">
+                <div class="accordion-item">
+                    <h2 class="accordion-header" id="headingOne">
+                        <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-library-info" aria-expanded="true" aria-controls="collapse-library-info">
+                            <i class="bi bi-book me-2"></i> Plant Library Information
+                        </button>
+                    </h2>
+                    <div id="collapse-library-info" class="accordion-collapse collapse show" aria-labelledby="headingOne">
+                        <div class="accordion-body">
+                           {% if plant.library_plant_id %}
+                                <h6 class="card-subtitle mb-2 text-muted">Origin</h6>
+                                <p><strong>Country:</strong> {{ plant.origin_country or 'N/A' }}<br>
+                                   <strong>Region:</strong> {{ plant.origin_region or 'N/A' }}</p>
+                                
+                                <div class="map-responsive mb-3">
+                                    <iframe
+                                        width="100%"
+                                        height="250"
+                                        frameborder="0" style="border:0; border-radius: 0.25rem;"
+                                        src="https://maps.google.com/maps?q={{ plant.origin_region | urlencode }},{{ plant.origin_country | urlencode }}&t=&z=5&ie=UTF8&iwloc=&output=embed"
+                                        allowfullscreen>
+                                    </iframe>
+                                </div>
+                                <hr>
 
-                    <h6 class="card-subtitle mb-2 text-muted">温度情報 (°C)</h6>
-                    <table class="table table-sm table-bordered small">
-                        <tbody>
-                            {% if plant.growing_fast_temp_low is not none and plant.growing_fast_temp_high is not none %}
-                            <tr>
-                                <th class="table-light" style="width: 40%;">高速成長期</th>
-                                <td>{{ plant.growing_fast_temp_low }}° ~ {{ plant.growing_fast_temp_high }}°</td>
-                            </tr>
-                            {% endif %}
-                            {% if plant.growing_slow_temp_low is not none and plant.growing_slow_temp_high is not none %}
-                            <tr>
-                                <th class="table-light">緩慢成長期</th>
-                                <td>{{ plant.growing_slow_temp_low }}° ~ {{ plant.growing_slow_temp_high }}°</td>
-                            </tr>
-                            {% endif %}
-                            {% if plant.hot_dormancy_temp_low is not none and plant.hot_dormancy_temp_high is not none %}
-                            <tr>
-                                <th class="table-light">夏期休眠</th>
-                                <td>{{ plant.hot_dormancy_temp_low }}° ~ {{ plant.hot_dormancy_temp_high }}°</td>
-                            </tr>
-                            {% endif %}
-                            {% if plant.cold_dormancy_temp_low is not none and plant.cold_dormancy_temp_high is not none %}
-                            <tr>
-                                <th class="table-light">冬期休眠</th>
-                                <td>{{ plant.cold_dormancy_temp_low }}° ~ {{ plant.cold_dormancy_temp_high }}°</td>
-                            </tr>
-                            {% endif %}
-                            {% if plant.lethal_temp_low is not none %}
-                            <tr class="table-warning">
-                                <th >生存限界 (下限)</th>
-                                <td>{{ plant.lethal_temp_low }}°</td>
-                            </tr>
-                            {% endif %}
-                             {% if plant.lethal_temp_high is not none %}
-                             <tr class="table-danger">
-                                <th>生存限界 (上限)</th>
-                                <td>{{ plant.lethal_temp_high }}°</td>
-                            </tr>
-                            {% endif %}
-                        </tbody>
-                    </table>
+                                <h6 class="card-subtitle mb-2 text-muted">Temperature Info (°C)</h6>
+                                <table class="table table-sm table-bordered small">
+                                    <tbody>
+                                        {% if plant.growing_fast_temp_low is not none and plant.growing_fast_temp_high is not none %}
+                                        <tr><th class="table-light" style="width: 40%;">Fast Growth</th><td>{{ plant.growing_fast_temp_low }}° ~ {{ plant.growing_fast_temp_high }}°</td></tr>{% endif %}
+                                        {% if plant.growing_slow_temp_low is not none and plant.growing_slow_temp_high is not none %}
+                                        <tr><th class="table-light">Slow Growth</th><td>{{ plant.growing_slow_temp_low }}° ~ {{ plant.growing_slow_temp_high }}°</td></tr>{% endif %}
+                                        {% if plant.hot_dormancy_temp_low is not none and plant.hot_dormancy_temp_high is not none %}
+                                        <tr><th class="table-light">Hot Dormancy</th><td>{{ plant.hot_dormancy_temp_low }}° ~ {{ plant.hot_dormancy_temp_high }}°</td></tr>{% endif %}
+                                        {% if plant.cold_dormancy_temp_low is not none and plant.cold_dormancy_temp_high is not none %}
+                                        <tr><th class="table-light">Cold Dormancy</th><td>{{ plant.cold_dormancy_temp_low }}° ~ {{ plant.cold_dormancy_temp_high }}°</td></tr>{% endif %}
+                                        {% if plant.lethal_temp_low is not none %}<tr class="table-warning"><th>Lethal Low</th><td>{{ plant.lethal_temp_low }}°</td></tr>{% endif %}
+                                        {% if plant.lethal_temp_high is not none %}<tr class="table-danger"><th>Lethal High</th><td>{{ plant.lethal_temp_high }}°</td></tr>{% endif %}
+                                    </tbody>
+                                </table>
+                           {% else %}
+                                <p class="text-muted">No library profile linked. <a href="{{ url_for('management.management')}}">Link one now</a>.</p>
+                           {% endif %}
+                        </div>
+                    </div>
                 </div>
             </div>
 
         </div>
 
-        <!-- 右カラム: 履歴データ -->
+        <!-- Right Column: History Data -->
         <div class="col-lg-7">
-            <div class="card shadow-sm mb-4">
-                <div class="card-header">
-                    <h5 class="mb-0"><i class="bi bi-calendar3"></i> 日毎のデータ履歴</h5>
-                </div>
-                <div class="card-body" style="max-height: 400px; overflow-y: auto;">
-                    <table class="table table-striped table-hover">
-                        <thead class="table-light sticky-top">
-                            <tr>
-                                <th>日付</th>
-                                <th>最高/最低気温</th>
-                                <th>成長ステージ</th>
-                                <th>水やりアドバイス</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for record in daily_history %}
-                            <tr>
-                                <td>{{ record.analysis_date }}</td>
-                                <td>
-                                    <span class="text-danger">{{ record.daily_temp_max | round(1) if record.daily_temp_max is not none else 'N/A' }}°</span> /
-                                    <span class="text-primary">{{ record.daily_temp_min | round(1) if record.daily_temp_min is not none else 'N/A' }}°</span>
-                                </td>
-                                <td>{{ record.growth_period | replace('_', ' ') | title }}</td>
-                                <td>{{ record.watering_advice }}</td>
-                            </tr>
-                            {% else %}
-                            <tr>
-                                <td colspan="4" class="text-center text-muted">履歴データがありません。</td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-            
-            <!-- 日別集計グラフ -->
-            <div class="card shadow-sm mb-4">
-                 <div class="card-header">
-                    <h5 class="mb-0"><i class="bi bi-graph-up-arrow"></i> 日別集計グラフ</h5>
-                </div>
-                <div class="card-body">
-                    {% set managed_id = plant.managed_plant_id %}
-                    <div class="btn-group btn-group-sm mb-3" role="group">
-                        <button type="button" class="btn btn-outline-secondary analysis-period-btn active" data-period="7d" data-plant-id="{{ managed_id }}">1 Week</button>
-                        <button type="button" class="btn btn-outline-secondary analysis-period-btn" data-period="30d" data-plant-id="{{ managed_id }}">1 Month</button>
-                        <button type="button" class="btn btn-outline-secondary analysis-period-btn" data-period="1y" data-plant-id="{{ managed_id }}">1 Year</button>
-                    </div>
-                    <div class="position-relative" style="height:300px">
-                        <canvas id="analysis-history-chart-{{ managed_id }}"></canvas>
-                        <div id="analysis-chart-loader-{{ managed_id }}" class="position-absolute top-50 start-50 translate-middle d-none">
-                            <div class="spinner-border text-primary" role="status">
-                                <span class="visually-hidden">Loading...</span>
-                            </div>
+            <ul class="nav nav-tabs" id="historyTab" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active" id="analysis-log-tab" data-bs-toggle="tab" data-bs-target="#analysis-log" type="button" role="tab" aria-controls="analysis-log" aria-selected="true">Analysis Log</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="data-charts-tab" data-bs-toggle="tab" data-bs-target="#data-charts" type="button" role="tab" aria-controls="data-charts" aria-selected="false">Data Charts</button>
+                </li>
+            </ul>
+            <div class="tab-content" id="historyTabContent">
+                <!-- Analysis Log Tab -->
+                <div class="tab-pane fade show active" id="analysis-log" role="tabpanel" aria-labelledby="analysis-log-tab">
+                     <div class="card shadow-sm">
+                        <div class="card-body" style="max-height: 80vh; overflow-y: auto;">
+                            <table class="table table-striped table-hover">
+                                <thead class="table-light sticky-top">
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Temp (Max/Min)</th>
+                                        <th>Growth</th>
+                                        <th>Watering Advice</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for record in daily_history %}
+                                    <tr>
+                                        <td>{{ record.analysis_date }}</td>
+                                        <td>
+                                            <span class="text-danger">{{ record.daily_temp_max | round(1) if record.daily_temp_max is not none else 'N/A' }}°</span> /
+                                            <span class="text-primary">{{ record.daily_temp_min | round(1) if record.daily_temp_min is not none else 'N/A' }}°</span>
+                                        </td>
+                                        <td>{{ record.growth_period | replace('_', ' ') | title }}</td>
+                                        <td>{{ record.watering_advice }}</td>
+                                    </tr>
+                                    {% else %}
+                                    <tr><td colspan="4" class="text-center text-muted">No history data available.</td></tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
                         </div>
                     </div>
                 </div>
-            </div>
+                <!-- Data Charts Tab -->
+                <div class="tab-pane fade" id="data-charts" role="tabpanel" aria-labelledby="data-charts-tab">
+                    <!-- Daily Aggregates Chart -->
+                    <div class="card shadow-sm mb-4">
+                         <div class="card-header"><h5 class="mb-0"><i class="bi bi-graph-up-arrow"></i> Daily Aggregates</h5></div>
+                        <div class="card-body">
+                            {% set managed_id = plant.managed_plant_id %}
+                            <div class="btn-group btn-group-sm mb-3" role="group">
+                                <button type="button" class="btn btn-outline-secondary analysis-period-btn active" data-period="7d" data-plant-id="{{ managed_id }}">1W</button>
+                                <button type="button" class="btn btn-outline-secondary analysis-period-btn" data-period="30d" data-plant-id="{{ managed_id }}">1M</button>
+                                <button type="button" class="btn btn-outline-secondary analysis-period-btn" data-period="1y" data-plant-id="{{ managed_id }}">1Y</button>
+                            </div>
+                            <div class="d-flex flex-wrap justify-content-center small mb-2 analysis-chart-options" id="analysis-chart-options-{{ managed_id }}" style="display: none;">
+                                <div class="form-check form-switch me-3">
+                                    <input class="form-check-input" type="checkbox" role="switch" id="toggle-analysis-temp_range-{{ managed_id }}" data-dataset-label="Temp Range" checked>
+                                    <label class="form-check-label" for="toggle-analysis-temp_range-{{ managed_id }}"><span class="badge" style="background-color: rgba(220, 53, 69, 0.5); color: white;">Temp</span></label>
+                                </div>
+                                <div class="form-check form-switch me-3">
+                                    <input class="form-check-input" type="checkbox" role="switch" id="toggle-analysis-humidity_range-{{ managed_id }}" data-dataset-label="Humidity Range" checked>
+                                    <label class="form-check-label" for="toggle-analysis-humidity_range-{{ managed_id }}"><span class="badge" style="background-color: rgba(13, 202, 240, 0.5); color: #333;">Humidity</span></label>
+                                </div>
+                                <div class="form-check form-switch me-3">
+                                    <input class="form-check-input" type="checkbox" role="switch" id="toggle-analysis-light_range-{{ managed_id }}" data-dataset-label="Light Range" checked>
+                                    <label class="form-check-label" for="toggle-analysis-light_range-{{ managed_id }}"><span class="badge" style="background-color: rgba(255, 193, 7, 0.5); color: #333;">Light</span></label>
+                                </div>
+                                <div class="form-check form-switch me-3">
+                                    <input class="form-check-input" type="checkbox" role="switch" id="toggle-analysis-fast_growth-{{ managed_id }}" data-dataset-label="Fast Growth Range" checked>
+                                    <label class="form-check-label" for="toggle-analysis-fast_growth-{{ managed_id }}"><span class="badge" style="background-color: rgba(40, 167, 69, 0.5); color: white;">Fast Growth</span></label>
+                                </div>
+                                <div class="form-check form-switch me-3">
+                                    <input class="form-check-input" type="checkbox" role="switch" id="toggle-analysis-slow_growth-{{ managed_id }}" data-dataset-label="Slow Growth Range" checked>
+                                    <label class="form-check-label" for="toggle-analysis-slow_growth-{{ managed_id }}"><span class="badge" style="background-color: rgba(25, 135, 84, 0.5); color: white;">Slow Growth</span></label>
+                                </div>
+                                <div class="form-check form-switch me-3">
+                                    <input class="form-check-input" type="checkbox" role="switch" id="toggle-analysis-hot_dormancy-{{ managed_id }}" data-dataset-label="Hot Dormancy Range" checked>
+                                    <label class="form-check-label" for="toggle-analysis-hot_dormancy-{{ managed_id }}"><span class="badge" style="background-color: rgba(255, 193, 7, 0.5); color: #333;">Hot Dormancy</span></label>
+                                </div>
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" role="switch" id="toggle-analysis-cold_dormancy-{{ managed_id }}" data-dataset-label="Cold Dormancy Range" checked>
+                                    <label class="form-check-label" for="toggle-analysis-cold_dormancy-{{ managed_id }}"><span class="badge" style="background-color: rgba(13, 202, 240, 0.5); color: #333;">Cold Dormancy</span></label>
+                                </div>
+                            </div>
+                            <div class="position-relative" style="height:300px">
+                                <canvas id="analysis-history-chart-{{ managed_id }}"></canvas>
+                                <div id="analysis-chart-loader-{{ managed_id }}" class="position-absolute top-50 start-50 translate-middle d-none">
+                                    <div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
 
-            <!-- センサーグラフ -->
-            {% if plant.assigned_plant_sensor_id or plant.assigned_switchbot_id %}
-            <div class="card shadow-sm">
-                 <div class="card-header">
-                    <h5 class="mb-0"><i class="bi bi-graph-up"></i> センサーグラフ (直近24時間)</h5>
-                </div>
-                <div class="card-body">
-                    {% set device_id_to_chart = plant.assigned_plant_sensor_id or plant.assigned_switchbot_id %}
-                    <div class="btn-group btn-group-sm mb-3" role="group">
-                        <button type="button" class="btn btn-outline-secondary period-btn active" data-period="24h" data-device-id="{{ device_id_to_chart }}">24H</button>
-                        <button type="button" class="btn btn-outline-secondary period-btn" data-period="7d" data-device-id="{{ device_id_to_chart }}">7D</button>
-                        <button type="button" class="btn btn-outline-secondary period-btn" data-period="30d" data-device-id="{{ device_id_to_chart }}">1M</button>
-                        <button type="button" class="btn btn-outline-secondary period-btn" data-period="1y" data-device-id="{{ device_id_to_chart }}">1Y</button>
-                    </div>
-                    <div class="position-relative" style="height:300px">
-                        <canvas id="history-chart-{{ device_id_to_chart }}"></canvas>
-                        <div id="chart-loader-{{ device_id_to_chart }}" class="position-absolute top-50 start-50 translate-middle d-none">
-                            <div class="spinner-border text-primary" role="status">
-                                <span class="visually-hidden">Loading...</span>
+                    <!-- Sensor Graph -->
+                    {% if plant.assigned_plant_sensor_id or plant.assigned_switchbot_id %}
+                    <div class="card shadow-sm">
+                         <div class="card-header"><h5 class="mb-0"><i class="bi bi-graph-up"></i> Sensor Graph</h5></div>
+                        <div class="card-body">
+                            {% set device_id_to_chart = plant.assigned_plant_sensor_id or plant.assigned_switchbot_id %}
+                            <div class="btn-group btn-group-sm mb-3" role="group">
+                                <button type="button" class="btn btn-outline-secondary period-btn active" data-period="24h" data-device-id="{{ device_id_to_chart }}">24H</button>
+                                <button type="button" class="btn btn-outline-secondary period-btn" data-period="7d" data-device-id="{{ device_id_to_chart }}">7D</button>
+                                <button type="button" class="btn btn-outline-secondary period-btn" data-period="30d" data-device-id="{{ device_id_to_chart }}">1M</button>
+                                <button type="button" class="btn btn-outline-secondary period-btn" data-period="1y" data-device-id="{{ device_id_to_chart }}">1Y</button>
+                            </div>
+                            <div class="d-flex flex-wrap justify-content-center small mb-2 chart-options" id="chart-options-{{ device_id_to_chart }}" style="display: none;">
+                                <div class="form-check form-switch me-3">
+                                    <input class="form-check-input" type="checkbox" role="switch" id="toggle-fast_growth-{{ device_id_to_chart }}" data-dataset-label="Fast Growth Range" checked>
+                                    <label class="form-check-label" for="toggle-fast_growth-{{ device_id_to_chart }}"><span class="badge" style="background-color: rgba(40, 167, 69, 0.5); color: white;">Fast Growth</span></label>
+                                </div>
+                                <div class="form-check form-switch me-3">
+                                    <input class="form-check-input" type="checkbox" role="switch" id="toggle-slow_growth-{{ device_id_to_chart }}" data-dataset-label="Slow Growth Range" checked>
+                                    <label class="form-check-label" for="toggle-slow_growth-{{ device_id_to_chart }}"><span class="badge" style="background-color: rgba(25, 135, 84, 0.5); color: white;">Slow Growth</span></label>
+                                </div>
+                                <div class="form-check form-switch me-3">
+                                    <input class="form-check-input" type="checkbox" role="switch" id="toggle-hot_dormancy-{{ device_id_to_chart }}" data-dataset-label="Hot Dormancy Range" checked>
+                                    <label class="form-check-label" for="toggle-hot_dormancy-{{ device_id_to_chart }}"><span class="badge" style="background-color: rgba(255, 193, 7, 0.5); color: #333;">Hot Dormancy</span></label>
+                                </div>
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" role="switch" id="toggle-cold_dormancy-{{ device_id_to_chart }}" data-dataset-label="Cold Dormancy Range" checked>
+                                    <label class="form-check-label" for="toggle-cold_dormancy-{{ device_id_to_chart }}"><span class="badge" style="background-color: rgba(13, 202, 240, 0.5); color: #333;">Cold Dormancy</span></label>
+                                </div>
+                            </div>
+                            <div class="position-relative" style="height:300px">
+                                <canvas id="history-chart-{{ device_id_to_chart }}"></canvas>
+                                <div id="chart-loader-{{ device_id_to_chart }}" class="position-absolute top-50 start-50 translate-middle d-none">
+                                    <div class="spinner-border text-primary" role="status">
+                                        <span class="visually-hidden">Loading...</span>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
+                    {% endif %}
                 </div>
             </div>
-            {% endif %}
         </div>
     </div>
 </div>

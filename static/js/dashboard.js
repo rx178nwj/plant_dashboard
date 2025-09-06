@@ -31,19 +31,13 @@ function initializeDashboard() {
 
 /**
  * ページ上のすべての履歴グラフを初期化します。
- * ダッシュボードと詳細ページの両方で呼び出されます。
+ * この関数はダッシュボードページでのみ使用されます。
  */
 function initializePageCharts() {
-    const dashboardPage = document.getElementById('dashboard-page');
-    const detailPage = document.getElementById('plant-detail-page');
+    const pageContainer = document.getElementById('dashboard-page');
+    if (!pageContainer) return;
 
-    // どちらのページでもなければ何もしない
-    if (!dashboardPage && !detailPage) return;
-
-    const pageContainer = dashboardPage || detailPage;
     const chartInstances = {};
-    
-    // ダッシュボードでは選択された日付を、詳細ページでは常に今日の日付を使用
     const dateForChart = pageContainer.dataset.selectedDate || new Date().toISOString().split('T')[0];
 
     const chartCanvases = pageContainer.querySelectorAll('canvas[id^="history-chart-"]');
@@ -80,7 +74,10 @@ async function updateHistoryChart(deviceId, period, chartInstances, selectedDate
         const response = await fetch(`/api/history/${deviceId}?period=${period}&date=${selectedDate}`);
         if (!response.ok) throw new Error(`API request failed`);
         
-        const historyData = await response.json();
+        // APIからのレスポンスは { history: [], thresholds: {} } という形式
+        const responseData = await response.json();
+        const historyData = responseData.history; 
+
         if (historyData.length === 0) {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             ctx.textAlign = 'center';
@@ -94,9 +91,6 @@ async function updateHistoryChart(deviceId, period, chartInstances, selectedDate
         if (period === '7d' || period === '30d') timeUnit = 'day';
         else if (period === '1y') timeUnit = 'month';
 
-        // --- ▼▼▼ MODIFICATION START ▼▼▼ ---
-
-        // データセットを動的に構築
         const datasets = [{
             label: 'Temperature (°C)',
             data: historyData.map(d => d.temperature),
@@ -120,7 +114,6 @@ async function updateHistoryChart(deviceId, period, chartInstances, selectedDate
             y_humid: { position: 'right', title: { display: true, text: 'Humidity (%)' }, grid: { drawOnChartArea: false } }
         };
 
-        // 土壌センサーのデータ（照度、土壌水分）が存在する場合、グラフに追加
         if (historyData.some(d => d.light_lux !== null || d.soil_moisture !== null)) {
             datasets.push({
                 label: 'Light (lux)',
@@ -167,7 +160,6 @@ async function updateHistoryChart(deviceId, period, chartInstances, selectedDate
                 scales: scales
             }
         });
-        // --- ▲▲▲ MODIFICATION END ▲▲▲ ---
 
     } catch (error) {
         console.error(`Chart update error for ${deviceId}:`, error);

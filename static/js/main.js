@@ -9,14 +9,11 @@ document.addEventListener('DOMContentLoaded', function() {
     // ページ上の要素の存在を確認して、対応する初期化関数を呼び出す
     if (document.getElementById('dashboard-page')) {
         initializeDashboard();
+        initializePageCharts(); // ダッシュボードのセンサーグラフ
     }
-    // グラフを持つページで共通のセンサーチャート初期化を呼び出す
-    if (document.getElementById('dashboard-page') || document.getElementById('plant-detail-page')) {
-        initializePageCharts();
-    }
-    // 詳細ページで分析チャートを初期化
+    
     if (document.getElementById('plant-detail-page')) {
-        initializeAnalysisCharts();
+        initializeDetailCharts(); // 詳細ページの分析グラフとセンサーグラフ
     }
     if (document.getElementById('devices-page')) {
         initializeDeviceManagement();
@@ -28,4 +25,6 @@ document.addEventListener('DOMContentLoaded', function() {
         initializeManagementDashboard();
     }
 });
+
+
 
