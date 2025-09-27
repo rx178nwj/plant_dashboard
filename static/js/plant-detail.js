@@ -202,7 +202,7 @@ async function updateAnalysisHistoryChart(managedPlantId, period, chartInstances
         });
         datasets.push({
             label: 'Daily Temp Avg', data: historyData.map(d => d.daily_temp_ave),
-            borderColor: 'rgba(220, 53, 69, 1)', yAxisID: 'y_temp', tension: 0.1, borderWidth: 2
+            borderColor: 'rgba(220, 53, 69, 1)', yAxisID: 'y_temp', tension: 0.1, borderWidth: 2, pointRadius: 0
         });
 
         const scales = {
@@ -222,7 +222,7 @@ async function updateAnalysisHistoryChart(managedPlantId, period, chartInstances
             });
             datasets.push({
                 label: 'Avg Humidity (%)', data: historyData.map(d => d.daily_humidity_ave),
-                borderColor: 'rgba(13, 202, 240, 1)', yAxisID: 'y_humid', tension: 0.1, borderWidth: 2
+                borderColor: 'rgba(13, 202, 240, 1)', yAxisID: 'y_humid', tension: 0.1, borderWidth: 2, pointRadius: 0
             });
             scales.y_humid = { position: 'right', title: { display: true, text: 'Humidity (%)' }, grid: { drawOnChartArea: false } };
         }
@@ -239,7 +239,7 @@ async function updateAnalysisHistoryChart(managedPlantId, period, chartInstances
             });
              datasets.push({
                 label: 'Avg Light (lux)', data: historyData.map(d => d.daily_light_ave),
-                borderColor: 'rgba(255, 193, 7, 1)', yAxisID: 'y_light', tension: 0.1, borderWidth: 2
+                borderColor: 'rgba(255, 193, 7, 1)', yAxisID: 'y_light', tension: 0.1, borderWidth: 2, pointRadius: 0
             });
             scales.y_light = { position: 'right', title: { display: true, text: 'Light (lux)' }, grid: { drawOnChartArea: false } };
         }
@@ -247,7 +247,7 @@ async function updateAnalysisHistoryChart(managedPlantId, period, chartInstances
         if (historyData.some(d => d.daily_soil_moisture_ave !== null)) {
              datasets.push({
                 label: 'Avg Soil Moisture', data: historyData.map(d => d.daily_soil_moisture_ave),
-                borderColor: 'rgba(108, 78, 56, 1)', yAxisID: 'y_soil', tension: 0.1
+                borderColor: 'rgba(108, 78, 56, 1)', yAxisID: 'y_soil', tension: 0.1, pointRadius: 0
             });
             scales.y_soil = { position: 'right', title: { display: true, text: 'Soil Moisture' }, grid: { drawOnChartArea: false } };
         }
@@ -278,9 +278,13 @@ async function updateAnalysisHistoryChart(managedPlantId, period, chartInstances
             data: { labels: labels, datasets: datasets },
             options: {
                 responsive: true, maintainAspectRatio: false, scales: scales,
-                plugins: { legend: { labels: { 
-                    filter: item => item.text && !item.text.includes('Lower') && !item.text.includes('Upper') && !item.text.includes('Min') && !item.text.includes('Max')
-                } } }
+                plugins: { 
+                    legend: { 
+                        labels: { 
+                            filter: item => item.text && !item.text.includes('Lower') && !item.text.includes('Upper') && !item.text.includes('Min') && !item.text.includes('Max')
+                        } 
+                    } 
+                }
             }
         });
 
@@ -343,6 +347,7 @@ async function updateSensorHistoryChart(deviceId, period, chartInstances, select
         let timeUnit = (period === '7d' || period === '30d') ? 'day' : (period === '1y' ? 'month' : 'hour');
 
         const datasets = [];
+        const isAggregated = historyData[0] && historyData[0].temperature_max !== undefined;
 
         const periodColors = {
             fast_growth: 'rgba(40, 167, 69, 0.15)',
@@ -380,42 +385,73 @@ async function updateSensorHistoryChart(deviceId, period, chartInstances, select
                 yAxisID: 'y_temp', borderColor: 'rgba(13, 110, 253, 0.8)', borderWidth: 2, borderDash: [5, 5], pointRadius: 0, fill: false
             });
         }
-
-        const mainDatasets = [{
-            label: 'Temperature (°C)', data: historyData.map(d => d.temperature),
-            borderColor: 'rgba(220, 53, 69, 0.8)', yAxisID: 'y_temp', tension: 0.2,
-        }, {
-            label: 'Humidity (%)', data: historyData.map(d => d.humidity),
-            borderColor: 'rgba(13, 110, 253, 0.8)', yAxisID: 'y_humid', tension: 0.2,
-        }];
-
+        
         const scales = {
             x: { type: 'time', time: { unit: timeUnit, tooltipFormat: 'yyyy/MM/dd HH:mm' } },
             y_temp: { position: 'left', title: { display: true, text: 'Temperature (°C)' } },
             y_humid: { position: 'right', title: { display: true, text: 'Humidity (%)' }, grid: { drawOnChartArea: false } }
         };
 
-        if (historyData.some(d => d.light_lux !== null || d.soil_moisture !== null)) {
-            mainDatasets.push({
-                label: 'Light (lux)', data: historyData.map(d => d.light_lux),
-                borderColor: 'rgba(255, 206, 86, 0.8)', yAxisID: 'y_light', tension: 0.2,
-            }, {
-                label: 'Soil Moisture', data: historyData.map(d => d.soil_moisture),
-                borderColor: 'rgba(139, 69, 19, 0.8)', yAxisID: 'y_soil', tension: 0.2,
-            });
-            scales.y_light = { position: 'right', title: { display: true, text: 'Light (lux)' }, grid: { drawOnChartArea: false }};
-            scales.y_soil = { position: 'right', title: { display: true, text: 'Soil Moisture' }, grid: { drawOnChartArea: false } };
+        if (isAggregated) {
+            // Aggregated data view (min/max bands and average line)
+            datasets.push(
+                { label: 'Temp Min', data: historyData.map(d => d.temperature_min), yAxisID: 'y_temp', borderColor: 'transparent', backgroundColor: 'rgba(220, 53, 69, 0.2)', pointRadius: 0, fill: '+1' },
+                { label: 'Temp Max', data: historyData.map(d => d.temperature_max), yAxisID: 'y_temp', borderColor: 'transparent', backgroundColor: 'rgba(220, 53, 69, 0.2)', pointRadius: 0, fill: false },
+                { label: 'Temperature (°C)', data: historyData.map(d => d.temperature), borderColor: 'rgba(220, 53, 69, 1)', yAxisID: 'y_temp', tension: 0.1, borderWidth: 2, pointRadius: 0 },
+                { label: 'Humidity Min', data: historyData.map(d => d.humidity_min), yAxisID: 'y_humid', borderColor: 'transparent', backgroundColor: 'rgba(13, 110, 253, 0.2)', pointRadius: 0, fill: '+1' },
+                { label: 'Humidity Max', data: historyData.map(d => d.humidity_max), yAxisID: 'y_humid', borderColor: 'transparent', backgroundColor: 'rgba(13, 110, 253, 0.2)', pointRadius: 0, fill: false },
+                { label: 'Humidity (%)', data: historyData.map(d => d.humidity), borderColor: 'rgba(13, 110, 253, 1)', yAxisID: 'y_humid', tension: 0.1, borderWidth: 2, pointRadius: 0 }
+            );
+
+            if (historyData.some(d => d.light_lux_max !== null)) {
+                datasets.push(
+                    { label: 'Light Min', data: historyData.map(d => d.light_lux_min), yAxisID: 'y_light', borderColor: 'transparent', backgroundColor: 'rgba(255, 206, 86, 0.2)', pointRadius: 0, fill: '+1' },
+                    { label: 'Light Max', data: historyData.map(d => d.light_lux_max), yAxisID: 'y_light', borderColor: 'transparent', backgroundColor: 'rgba(255, 206, 86, 0.2)', pointRadius: 0, fill: false },
+                    { label: 'Light (lux)', data: historyData.map(d => d.light_lux), borderColor: 'rgba(255, 206, 86, 1)', yAxisID: 'y_light', tension: 0.1, borderWidth: 2, pointRadius: 0 }
+                );
+                scales.y_light = { position: 'right', title: { display: true, text: 'Light (lux)' }, grid: { drawOnChartArea: false }};
+            }
+            if (historyData.some(d => d.soil_moisture_max !== null)) {
+                datasets.push(
+                    { label: 'Soil Min', data: historyData.map(d => d.soil_moisture_min), yAxisID: 'y_soil', borderColor: 'transparent', backgroundColor: 'rgba(139, 69, 19, 0.2)', pointRadius: 0, fill: '+1' },
+                    { label: 'Soil Max', data: historyData.map(d => d.soil_moisture_max), yAxisID: 'y_soil', borderColor: 'transparent', backgroundColor: 'rgba(139, 69, 19, 0.2)', pointRadius: 0, fill: false },
+                    { label: 'Soil Moisture', data: historyData.map(d => d.soil_moisture), borderColor: 'rgba(139, 69, 19, 1)', yAxisID: 'y_soil', tension: 0.1, borderWidth: 2, pointRadius: 0 }
+                );
+                scales.y_soil = { position: 'right', title: { display: true, text: 'Soil Moisture' }, grid: { drawOnChartArea: false } };
+            }
+
+        } else {
+            // Raw data view (24h)
+            datasets.push(
+                { label: 'Temperature (°C)', data: historyData.map(d => d.temperature), borderColor: 'rgba(220, 53, 69, 0.8)', yAxisID: 'y_temp', tension: 0.2, pointRadius: 0 },
+                { label: 'Humidity (%)', data: historyData.map(d => d.humidity), borderColor: 'rgba(13, 110, 253, 0.8)', yAxisID: 'y_humid', tension: 0.2, pointRadius: 0 }
+            );
+
+            if (historyData.some(d => d.light_lux !== null || d.soil_moisture !== null)) {
+                datasets.push(
+                    { label: 'Light (lux)', data: historyData.map(d => d.light_lux), borderColor: 'rgba(255, 206, 86, 0.8)', yAxisID: 'y_light', tension: 0.2, pointRadius: 0 },
+                    { label: 'Soil Moisture', data: historyData.map(d => d.soil_moisture), borderColor: 'rgba(139, 69, 19, 0.8)', yAxisID: 'y_soil', tension: 0.2, pointRadius: 0 }
+                );
+                scales.y_light = { position: 'right', title: { display: true, text: 'Light (lux)' }, grid: { drawOnChartArea: false }};
+                scales.y_soil = { position: 'right', title: { display: true, text: 'Soil Moisture' }, grid: { drawOnChartArea: false } };
+            }
         }
-        
-        datasets.push(...mainDatasets);
         
         chartInstances[deviceId] = new Chart(canvas.getContext('2d'), {
             type: 'line', data: { labels: labels, datasets: datasets },
             options: {
                 responsive: true, maintainAspectRatio: false, scales: scales,
                 plugins: {
-                    legend: { labels: { filter: item => item.text && !item.text.includes('Range') && !item.text.includes('Temp') } },
-                    tooltip: { callbacks: { filter: item => item.dataset.label && !item.dataset.label.includes('Range') && !item.dataset.label.includes('Temp') } }
+                    legend: { 
+                        labels: { 
+                            filter: item => item.text && !item.text.includes('Range') && !item.text.includes('Temp') && !item.text.includes('Min') && !item.text.includes('Max') 
+                        } 
+                    },
+                    tooltip: { 
+                        callbacks: { 
+                            filter: item => item.dataset.label && !item.dataset.label.includes('Range') && !item.dataset.label.includes('Temp') && !item.dataset.label.includes('Min') && !item.dataset.label.includes('Max')
+                        } 
+                    }
                 }
             }
         });

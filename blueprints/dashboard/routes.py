@@ -192,17 +192,54 @@ def api_history(device_id):
         if thresholds_row:
             thresholds = dict(thresholds_row)
     
-    # 取得するカラムに light_lux と soil_moisture を追加
-    columns = "timestamp, temperature, humidity, light_lux, soil_moisture"
-    
+    end_datetime = f"{end_date_str} 23:59:59"
+
     if period == '24h':
-        query = f"SELECT {columns} FROM sensor_data WHERE device_id = ? AND date(timestamp) = ? ORDER BY timestamp ASC"
+        query = """
+            SELECT timestamp, temperature, humidity, light_lux, soil_moisture
+            FROM sensor_data
+            WHERE device_id = ? AND date(timestamp) = ?
+            ORDER BY timestamp ASC
+        """
         history = conn.execute(query, (device_id, end_date_str)).fetchall()
     else:
-        period_map = { '7d': "'-7 days'", '30d': "'-1 month'", '1y': "'-1 year'" }
-        time_modifier = period_map.get(period, "'-7 days'")
-        end_datetime = f"{end_date_str} 23:59:59"
-        query = f"SELECT {columns} FROM sensor_data WHERE device_id = ? AND timestamp BETWEEN datetime(?, {time_modifier}) AND ? ORDER BY timestamp ASC"
+        if period == '7d':
+            time_modifier = "'-7 days'"
+            group_by_clause = "GROUP BY strftime('%Y-%m-%d %H', timestamp)"
+            select_timestamp = "strftime('%Y-%m-%d %H:00:00', timestamp) as timestamp"
+        elif period == '30d':
+            time_modifier = "'-1 month'"
+            group_by_clause = "GROUP BY strftime('%Y-%m-%d', timestamp), CAST(strftime('%H', timestamp) / 6 AS INTEGER)"
+            select_timestamp = "strftime('%Y-%m-%d', timestamp) || ' ' || printf('%02d:00:00', (CAST(strftime('%H', timestamp) AS INTEGER) / 6) * 6) as timestamp"
+        elif period == '1y':
+            time_modifier = "'-1 year'"
+            group_by_clause = "GROUP BY date(timestamp)"
+            select_timestamp = "strftime('%Y-%m-%d 00:00:00', timestamp) as timestamp"
+        else: # Default to 7d
+            time_modifier = "'-7 days'"
+            group_by_clause = "GROUP BY strftime('%Y-%m-%d %H', timestamp)"
+            select_timestamp = "strftime('%Y-%m-%d %H:00:00', timestamp) as timestamp"
+
+        query = f"""
+            SELECT
+                {select_timestamp},
+                AVG(temperature) as temperature,
+                MAX(temperature) as temperature_max,
+                MIN(temperature) as temperature_min,
+                AVG(humidity) as humidity,
+                MAX(humidity) as humidity_max,
+                MIN(humidity) as humidity_min,
+                AVG(light_lux) as light_lux,
+                MAX(light_lux) as light_lux_max,
+                MIN(light_lux) as light_lux_min,
+                AVG(soil_moisture) as soil_moisture,
+                MAX(soil_moisture) as soil_moisture_max,
+                MIN(soil_moisture) as soil_moisture_min
+            FROM sensor_data
+            WHERE device_id = ? AND timestamp BETWEEN datetime(?, {time_modifier}) AND ?
+            {group_by_clause}
+            ORDER BY timestamp ASC
+        """
         history = conn.execute(query, (device_id, end_datetime, end_datetime)).fetchall()
         
     conn.close()
@@ -213,6 +250,7 @@ def api_history(device_id):
     }
     
     return jsonify(response_data)
+
 
 @dashboard_bp.route('/api/plant-analysis-history/<managed_plant_id>')
 @requires_auth
@@ -295,3 +333,4 @@ def stream():
             time.sleep(5)
             
     return Response(event_stream(), mimetype='text/event-stream')
+
