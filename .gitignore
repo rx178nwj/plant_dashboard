@@ -16,3 +16,4 @@ __pycache__/
 */*.pyc
 *.pyo
 *.pyd
+uploads/plant_images/*
