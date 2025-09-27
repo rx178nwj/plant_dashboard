@@ -25,7 +25,9 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger(__name__)
-
+# ★★★ デバッグログを表示するためのおまじない ★★★
+#logger.setLevel(logging.DEBUG)
+# ★★★ ここまで ★★★
 def process_data_pipe():
     """一時ファイルを処理してDBに保存する"""
     if not os.path.exists(DATA_PIPE_PATH):

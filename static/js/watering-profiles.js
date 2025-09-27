@@ -13,7 +13,7 @@ function initializeWateringProfiles() {
     const placeholder = document.getElementById('editor-placeholder-profiles');
     const editorTitle = document.getElementById('editor-title-profiles');
     const saveBtn = document.getElementById('save-profile-btn');
-    const libraryIdInput = document.getElementById('library-plant-id-input');
+    const libraryIdInput = document.getElementById('library-plant-id-input'); // This is now only for reference if needed, not for saving
 
     const dryThresholdInput = document.getElementById('dry-threshold');
     const wetThresholdInput = document.getElementById('wet-threshold');
@@ -38,9 +38,11 @@ function initializeWateringProfiles() {
         plantList.querySelectorAll('.list-group-item').forEach(el => el.classList.remove('active'));
         target.classList.add('active');
 
-        const { libraryPlantId, sensorId } = target.dataset;
+        const { managedPlantId, libraryPlantId, sensorId } = target.dataset;
         editorTitle.textContent = `Editing: ${target.textContent.trim()}`;
-        libraryIdInput.value = libraryPlantId;
+        
+        // We use managedPlantId for fetching and saving profiles now.
+        // libraryIdInput.value = libraryPlantId; // No longer the primary ID for this page's logic
 
         // Show editor and hide placeholder
         placeholder.style.display = 'none';
@@ -48,8 +50,8 @@ function initializeWateringProfiles() {
 
         // Fetch profile settings and chart data concurrently
         await Promise.all([
-            fetchAndDisplayProfile(libraryPlantId),
-            fetchAndDisplayChart(sensorId, libraryPlantId)
+            fetchAndDisplayProfile(managedPlantId),
+            fetchAndDisplayChart(sensorId, libraryPlantId, managedPlantId) // Pass managedPlantId for profile fetching
         ]);
     });
 
@@ -57,8 +59,11 @@ function initializeWateringProfiles() {
      * Handles the save button click event.
      */
     saveBtn.addEventListener('click', async () => {
-        const libraryPlantId = libraryIdInput.value;
-        if (!libraryPlantId) return;
+        const activePlant = plantList.querySelector('.list-group-item.active');
+        if (!activePlant) return;
+
+        const { managedPlantId, libraryPlantId, sensorId } = activePlant.dataset;
+        if (!managedPlantId) return;
 
         const profileData = {
             soil_moisture_dry_threshold_voltage: parseFloat(dryThresholdInput.value) || null,
@@ -73,7 +78,7 @@ function initializeWateringProfiles() {
         saveBtn.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Saving...`;
 
         try {
-            const response = await fetch(`/api/plant-watering-profile/${libraryPlantId}`, {
+            const response = await fetch(`/api/managed-plant-watering-profile/${managedPlantId}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(profileData)
@@ -85,9 +90,8 @@ function initializeWateringProfiles() {
             showAlert('success', 'Watering profile saved successfully!', 'main-alert-box');
             
             // Re-render chart with new threshold lines
-            const activePlant = plantList.querySelector('.list-group-item.active');
             if(activePlant) {
-                fetchAndDisplayChart(activePlant.dataset.sensorId, activePlant.dataset.libraryPlantId);
+                fetchAndDisplayChart(sensorId, libraryPlantId, managedPlantId);
             }
         } catch (error) {
             showAlert('danger', `Error: ${error.message}`, 'main-alert-box');
@@ -99,11 +103,11 @@ function initializeWateringProfiles() {
     
     /**
      * Fetches and populates the watering profile settings form.
-     * @param {string} libraryPlantId - The ID of the plant profile to fetch.
+     * @param {string} managedPlantId - The ID of the managed plant profile to fetch.
      */
-    async function fetchAndDisplayProfile(libraryPlantId) {
+    async function fetchAndDisplayProfile(managedPlantId) {
         try {
-            const response = await fetch(`/api/plant-watering-profile/${libraryPlantId}`);
+            const response = await fetch(`/api/managed-plant-watering-profile/${managedPlantId}`);
             if (!response.ok) throw new Error('Could not fetch profile.');
             const data = await response.json();
 
@@ -123,9 +127,10 @@ function initializeWateringProfiles() {
     /**
      * Fetches historical sensor data and renders the chart.
      * @param {string} sensorId - The device ID of the sensor.
-     * @param {string} libraryPlantId - The plant library ID to fetch thresholds for.
+     * @param {string} libraryPlantId - The plant library ID (can be used for other things if needed).
+     * @param {string} managedPlantId - The managed plant ID to fetch thresholds for.
      */
-    async function fetchAndDisplayChart(sensorId, libraryPlantId) {
+    async function fetchAndDisplayChart(sensorId, libraryPlantId, managedPlantId) {
         if (chartInstance) {
             chartInstance.destroy();
         }
@@ -136,7 +141,7 @@ function initializeWateringProfiles() {
             const today = new Date().toISOString().split('T')[0];
             const [historyResponse, profileResponse] = await Promise.all([
                 fetch(`/api/history/${sensorId}?period=30d&date=${today}`),
-                fetch(`/api/plant-watering-profile/${libraryPlantId}`)
+                fetch(`/api/managed-plant-watering-profile/${managedPlantId}`)
             ]);
 
             if (!historyResponse.ok) throw new Error('Could not fetch sensor history.');
@@ -209,4 +214,3 @@ function initializeWateringProfiles() {
         }
     }
 }
-

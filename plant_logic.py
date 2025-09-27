@@ -5,7 +5,7 @@ from datetime import datetime, date, timedelta
 import logging
 
 logger = logging.getLogger(__name__)
-
+#logger.setLevel(logging.DEBUG)
 # --- Configuration Constants (future-proofing for external config) ---
 GROWTH_STATE_STREAK_DAYS = {
     'fast_growth': 3,
@@ -111,6 +111,9 @@ class PlantStateAnalyzer:
         new_survival_status = self._determine_survival_limits(target_date)
         new_watering_advice, log_from_watering = self._determine_watering_advice(new_growth_period, sensor_summary, last_analysis)
 
+        # Extract soil_state for watering_status column
+        new_watering_status = log_from_watering.get('soil_state') # Use get without default to allow None
+
         final_log = {**log_from_growth, **log_from_watering}
 
         cursor = self.conn.cursor()
@@ -119,15 +122,16 @@ class PlantStateAnalyzer:
                 managed_plant_id, analysis_date, daily_temp_max, daily_temp_min, daily_temp_ave,
                 daily_humidity_max, daily_humidity_min, daily_humidity_ave, daily_light_max, daily_light_min,
                 daily_light_ave, daily_soil_moisture_max, daily_soil_moisture_min, daily_soil_moisture_ave,
-                daily_watering_events, growth_period, survival_limit_status, watering_advice, analysis_log
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                daily_watering_events, growth_period, survival_limit_status, watering_advice, watering_status, analysis_log
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(managed_plant_id, analysis_date) DO UPDATE SET
                 daily_temp_max=excluded.daily_temp_max, daily_temp_min=excluded.daily_temp_min, daily_temp_ave=excluded.daily_temp_ave,
                 daily_humidity_max=excluded.daily_humidity_max, daily_humidity_min=excluded.daily_humidity_min, daily_humidity_ave=excluded.daily_humidity_ave,
                 daily_light_max=excluded.daily_light_max, daily_light_min=excluded.daily_light_min, daily_light_ave=excluded.daily_light_ave,
                 daily_soil_moisture_max=excluded.daily_soil_moisture_max, daily_soil_moisture_min=excluded.daily_soil_moisture_min, daily_soil_moisture_ave=excluded.daily_soil_moisture_ave,
                 daily_watering_events=excluded.daily_watering_events, growth_period=excluded.growth_period, 
-                survival_limit_status=excluded.survival_limit_status, watering_advice=excluded.watering_advice, analysis_log=excluded.analysis_log
+                survival_limit_status=excluded.survival_limit_status, watering_advice=excluded.watering_advice,
+                watering_status=excluded.watering_status, analysis_log=excluded.analysis_log
         """, (
             self.plant_id, target_date.strftime('%Y-%m-%d'),
             sensor_summary.get('daily_temp_max'), sensor_summary.get('daily_temp_min'), sensor_summary.get('daily_temp_ave'),
@@ -135,10 +139,10 @@ class PlantStateAnalyzer:
             sensor_summary.get('daily_light_max'), sensor_summary.get('daily_light_min'), sensor_summary.get('daily_light_ave'),
             sensor_summary.get('daily_soil_moisture_max'), sensor_summary.get('daily_soil_moisture_min'), sensor_summary.get('daily_soil_moisture_ave'),
             sensor_summary.get('daily_watering_events', 0),
-            new_growth_period, new_survival_status, new_watering_advice, json.dumps(final_log)
+            new_growth_period, new_survival_status, new_watering_advice, new_watering_status, json.dumps(final_log)
         ))
         self.conn.commit()
-        logger.info(f"Analysis for '{self.plant['plant_name']}' on {target_date} completed. Growth: {new_growth_period}, Water: {new_watering_advice}")
+        logger.info(f"Analysis for '{self.plant['plant_name']}' on {target_date} completed. Growth: {new_growth_period}, Water: {new_watering_advice}, Status: {new_watering_status}")
 
     def _determine_growth_period(self, sensor_summary, last_analysis):
         if 'daily_temp_max' not in sensor_summary or 'daily_temp_min' not in sensor_summary:
@@ -185,20 +189,53 @@ class PlantStateAnalyzer:
         
     def _determine_watering_advice(self, growth_period, sensor_summary, last_analysis):
         """Determines watering advice based on sensor data or growth period."""
-        if not self.plant.get('assigned_plant_sensor_id') or 'soil_moisture_latest' not in sensor_summary:
+        daily_avg_moisture = sensor_summary.get('daily_soil_moisture_ave')
+
+        # Add debug logging here
+        logger.debug(f"[{self.plant_id}] Checking watering advice. Avg Moisture: {daily_avg_moisture}")
+
+        if not self.plant.get('assigned_plant_sensor_id'):
             advice_map = {
                 'fast_growth': self.thresholds.get('watering_growing', 'Check soil moisture.'),
                 'slow_growth': self.thresholds.get('watering_slow_growing', 'Water when soil is dry.'),
                 'hot_dormancy': self.thresholds.get('watering_hot_dormancy', 'Reduce watering.'),
                 'cold_dormancy': self.thresholds.get('watering_cold_dormancy', 'Water sparingly.')
             }
-            return advice_map.get(growth_period, 'N/A'), {}
+            return advice_map.get(growth_period, 'N/A'), {"is_dry": None, "soil_state": "unknown"}
+        
+        if daily_avg_moisture is None:
+            return "No soil data for the day.", {"is_dry": None, "soil_state": None}
 
         t = self.thresholds
         dry_thresh = t.get('soil_moisture_dry_threshold_voltage')
         wet_thresh = t.get('soil_moisture_wet_threshold_voltage')
+
+        # Add debug logging for thresholds
+        logger.debug(f"[{self.plant_id}] Thresholds - Dry: {dry_thresh}, Wet: {wet_thresh}")
+
+        if dry_thresh is None or wet_thresh is None:
+            return "Voltage thresholds not set.", {"is_dry": None, "soil_state": "not_configured"}
         
-        # Get the correct dry days threshold for the current growth period
+        current_voltage = daily_avg_moisture
+        last_log = json.loads(last_analysis['analysis_log']) if last_analysis and last_analysis.get('analysis_log') else {}
+        last_soil_state = last_log.get('soil_state', 'unknown')
+        last_dry_streak = last_log.get('dry_streak_days', 0)
+        
+        new_soil_state = last_soil_state
+        if current_voltage > dry_thresh:
+            new_soil_state = 'dry'
+        elif current_voltage < wet_thresh:
+            new_soil_state = 'wet'
+        else:
+            new_soil_state = 'optimal'
+
+        new_dry_streak = 0
+        if new_soil_state == 'dry':
+            if last_soil_state == 'dry':
+                new_dry_streak = last_dry_streak + 1
+            else:
+                new_dry_streak = 1
+        
         dry_days_map = {
             'fast_growth': t.get('watering_days_fast_growth'),
             'slow_growth': t.get('watering_days_slow_growth'),
@@ -207,27 +244,17 @@ class PlantStateAnalyzer:
         }
         dry_days_thresh = dry_days_map.get(growth_period)
         
-        if dry_thresh is None or wet_thresh is None or dry_days_thresh is None:
-            return "Watering thresholds not set for this growth period.", {}
-        
-        current_voltage = sensor_summary['soil_moisture_latest']
-        last_log = json.loads(last_analysis['analysis_log']) if last_analysis and last_analysis.get('analysis_log') else {}
-        last_soil_state = last_log.get('soil_state', 'unknown')
-        last_dry_streak = last_log.get('dry_streak_days', 0)
-        
-        new_soil_state = last_soil_state
-        if last_soil_state in ('wet', 'optimal', 'unknown') and current_voltage > dry_thresh:
-            new_soil_state = 'dry'
-        elif last_soil_state in ('dry', 'optimal', 'unknown') and current_voltage < wet_thresh:
-            new_soil_state = 'wet'
-        elif wet_thresh <= current_voltage <= dry_thresh:
-            new_soil_state = 'optimal'
-
-        new_dry_streak = last_dry_streak + 1 if new_soil_state == 'dry' else 0
-        
         advice = f"Soil is {new_soil_state}."
-        if new_soil_state == 'dry' and new_dry_streak >= dry_days_thresh:
-            advice = f"Watering needed (Dry for {new_dry_streak} days)"
+        if dry_days_thresh is not None:
+            if new_soil_state == 'dry' and new_dry_streak >= dry_days_thresh:
+                advice = f"Watering needed (Dry for {new_dry_streak} days)"
+        else:
+             if new_soil_state == 'dry':
+                 advice = "Soil is dry, but watering day threshold is not set for this growth period."
             
-        new_log = {"soil_state": new_soil_state, "dry_streak_days": new_dry_streak}
+        new_log = {
+            "soil_state": new_soil_state, 
+            "dry_streak_days": new_dry_streak,
+            "is_dry": new_soil_state == 'dry'
+        }
         return advice, new_log
