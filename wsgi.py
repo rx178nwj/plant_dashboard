@@ -7,13 +7,8 @@ from dotenv import load_dotenv
 # -------------------------------------------------------------------
 load_dotenv()
 
-from app import create_app, init_db
-
-# データベースを初期化
-init_db()
+from app import create_app
 
 # Flaskアプリケーションインスタンスを作成
+# init_db()の呼び出しをここから削除しました。
 app = create_app()
-
-# データ収集用のバックグラウンドスレッドはデーモンに集約されたため、
-# ここでのスレッド起動は不要になりました。

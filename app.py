@@ -26,8 +26,12 @@ def create_app():
     # config.pyから設定を読み込む
     app.config.from_object(config)
 
-    # アプリケーションコンテキスト内でアップロードフォルダを作成
+    # アプリケーションコンテキスト内でDB初期化とアップロードフォルダ作成
+    # このブロックはアプリケーション起動時に一度だけ実行される
     with app.app_context():
+        # データベースの初期化とスキーママイグレーションを自動実行
+        init_db()
+        
         upload_folder = current_app.config.get('UPLOAD_FOLDER')
         if upload_folder:
             os.makedirs(upload_folder, exist_ok=True)
@@ -46,6 +50,7 @@ def create_app():
         return dict(nav_items=[
             {'url': 'dashboard.dashboard', 'icon': 'bi-grid-fill', 'text': 'Dashboard'},
             {'url': 'management.management', 'icon': 'bi-sliders', 'text': 'Management'},
+            {'url': 'management.watering_profiles', 'icon': 'bi-droplet-half', 'text': 'Watering Profiles'},
             {'url': 'devices.devices', 'icon': 'bi-hdd-stack-fill', 'text': 'Devices'},
             {'url': 'plants.plants', 'icon': 'bi-book-half', 'text': 'Plant Library'}
         ])
@@ -56,11 +61,8 @@ def create_app():
 
     return app
 
-# データ収集ループはデーモンに役割が移管されたため、ここからは削除されています。
-
 if __name__ == '__main__':
     logging.basicConfig(level=config.LOG_LEVEL, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', handlers=[logging.FileHandler(config.LOG_FILE_PATH), logging.StreamHandler()])
     app = create_app()
-    init_db()
-    # バックグラウンドスレッドの起動コードは削除されています。
     app.run(host='0.0.0.0', port=8000, debug=False)
+

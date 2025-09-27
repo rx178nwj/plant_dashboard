@@ -4,11 +4,9 @@ import device_manager as dm
 import json
 import uuid
 import os
-import httpx # httpxをインポート
+import httpx 
 from werkzeug.utils import secure_filename
-# from lib.gemini_client import lookup_plant_info # 不要になったため削除
 from blueprints.dashboard.routes import requires_auth
-# import asyncio # 不要になったため削除
 
 plants_bp = Blueprint('plants', __name__, template_folder='../../templates')
 
@@ -20,20 +18,88 @@ def plants():
     rows = conn.execute("SELECT * FROM plants ORDER BY genus, species").fetchall()
     conn.close()
     
-    # DBから取得したデータを辞書のリストに変換
     plants_list = [dict(row) for row in rows]
     
-    # 埋め込み用JSONデータを作成（ネストされたJSON文字列をオブジェクトに変換）
     for plant in plants_list:
         if 'monthly_temps_json' in plant and plant['monthly_temps_json']:
             try:
                 plant['monthly_temps'] = json.loads(plant['monthly_temps_json'])
             except json.JSONDecodeError:
-                plant['monthly_temps'] = None # パース失敗時はnullにする
+                plant['monthly_temps'] = None
     
-    # テンプレートにリストとJSONの両方を渡す
     plants_json = json.dumps(plants_list)
     return render_template('plants.html', plants=plants_list, plants_json=plants_json)
+
+@plants_bp.route('/watering-profiles')
+@requires_auth
+def watering_profiles():
+    """水やり閾値設定ページを表示します。"""
+    conn = dm.get_db_connection()
+    plants_with_sensors = conn.execute("""
+        SELECT
+            mp.managed_plant_id,
+            mp.plant_name,
+            mp.assigned_plant_sensor_id,
+            p.plant_id as library_plant_id
+        FROM managed_plants mp
+        JOIN plants p ON mp.library_plant_id = p.plant_id
+        WHERE mp.assigned_plant_sensor_id IS NOT NULL AND mp.assigned_plant_sensor_id != ''
+        ORDER BY mp.plant_name
+    """).fetchall()
+    conn.close()
+    return render_template('watering_profiles.html', plants_with_sensors=plants_with_sensors)
+
+
+@plants_bp.route('/api/plant-watering-profile/<plant_id>', methods=['GET', 'POST'])
+@requires_auth
+def api_plant_watering_profile(plant_id):
+    """特定の植物の水やり閾値を取得または更新します。"""
+    conn = dm.get_db_connection()
+    if request.method == 'POST':
+        data = request.json
+        try:
+            conn.execute("""
+                UPDATE plants
+                SET soil_moisture_dry_threshold_voltage = ?,
+                    soil_moisture_wet_threshold_voltage = ?,
+                    watering_days_fast_growth = ?,
+                    watering_days_slow_growth = ?,
+                    watering_days_hot_dormancy = ?,
+                    watering_days_cold_dormancy = ?
+                WHERE plant_id = ?
+            """, (
+                data.get('soil_moisture_dry_threshold_voltage'),
+                data.get('soil_moisture_wet_threshold_voltage'),
+                data.get('watering_days_fast_growth'),
+                data.get('watering_days_slow_growth'),
+                data.get('watering_days_hot_dormancy'),
+                data.get('watering_days_cold_dormancy'),
+                plant_id
+            ))
+            conn.commit()
+            return jsonify({'success': True, 'message': 'Watering profile updated successfully.'})
+        except Exception as e:
+            return jsonify({'success': False, 'message': str(e)}), 500
+        finally:
+            conn.close()
+
+    # GET request
+    profile = conn.execute("""
+        SELECT
+            soil_moisture_dry_threshold_voltage,
+            soil_moisture_wet_threshold_voltage,
+            watering_days_fast_growth,
+            watering_days_slow_growth,
+            watering_days_hot_dormancy,
+            watering_days_cold_dormancy
+        FROM plants
+        WHERE plant_id = ?
+    """, (plant_id,)).fetchone()
+    conn.close()
+    if profile:
+        return jsonify(dict(profile))
+    else:
+        return jsonify({}), 404
 
 @plants_bp.route('/api/plants/upload-image', methods=['POST'])
 @requires_auth
@@ -49,13 +115,11 @@ def api_upload_image():
         filename = secure_filename(f"plant_{uuid.uuid4().hex[:12]}.{file.filename.rsplit('.', 1)[1].lower()}")
         upload_folder = current_app.config['UPLOAD_FOLDER']
         
-        # Make sure the upload folder exists
         os.makedirs(upload_folder, exist_ok=True)
         
         file_path = os.path.join(upload_folder, filename)
         file.save(file_path)
         
-        # Return the URL to the uploaded file
         file_url = url_for('static', filename=os.path.join('uploads/plant_images', filename))
         return jsonify({'success': True, 'url': file_url})
     else:
@@ -100,20 +164,16 @@ def api_plant_lookup():
         api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key={api_key}"
         payload = {"contents": [{"parts": [{"text": prompt}]}], "generationConfig": {"response_mime_type": "application/json"}}
         
-        # 同期httpxクライアントを使用
         with httpx.Client(timeout=45.0) as client:
             response = client.post(api_url, json=payload)
             response.raise_for_status()
             result = response.json()
 
-        # 結果をパース
         content = result['candidates'][0]['content']['parts'][0]['text']
         if content.strip().startswith("```json"):
             content = content.strip()[7:-3]
         response_data = json.loads(content)
 
-        # AIが有効な画像URLを返さなかった場合（Noneや文字列"null"の場合を含む）、
-        # image_urlキーを削除してフロントエンドで既存の画像が上書きされないようにする
         image_url = response_data.get('image_url')
         if not image_url or image_url == 'null':
             response_data.pop('image_url', None)
@@ -121,12 +181,10 @@ def api_plant_lookup():
         return jsonify({'success': True, 'data': response_data})
         
     except httpx.HTTPStatusError as e:
-        # より具体的なエラーハンドリング
         return jsonify({'success': False, 'message': f'AI service returned an error: {e.response.status_code}'}), 500
     except (KeyError, IndexError, json.JSONDecodeError):
         return jsonify({'success': False, 'message': 'Could not parse Gemini API response.'}), 500
     except Exception as e:
-        # 一般的な例外
         return jsonify({'success': False, 'message': str(e)}), 500
 
 
@@ -143,38 +201,29 @@ def api_plants():
         cursor = conn.cursor()
         cursor.execute("SELECT plant_id FROM plants WHERE plant_id = ?", (plant_id,))
         exists = cursor.fetchone()
-        
-        params = (
-            data.get('genus'), data.get('species'), data.get('variety'), data.get('image_url'),
-            data.get('origin_country'), data.get('origin_region'), monthly_temps_str,
-            data.get('growing_fast_temp_high'), data.get('growing_fast_temp_low'),
-            data.get('growing_slow_temp_high'), data.get('growing_slow_temp_low'),
-            data.get('hot_dormancy_temp_high'), data.get('hot_dormancy_temp_low'),
-            data.get('cold_dormancy_temp_high'), data.get('cold_dormancy_temp_low'),
-            data.get('lethal_temp_high'), data.get('lethal_temp_low'),
-            data.get('watering_growing'), data.get('watering_slow_growing'),
-            data.get('watering_hot_dormancy'), data.get('watering_cold_dormancy'),
-            plant_id
-        )
 
+        columns = [
+            'genus', 'species', 'variety', 'image_url', 'origin_country', 'origin_region', 'monthly_temps_json',
+            'growing_fast_temp_high', 'growing_fast_temp_low', 'growing_slow_temp_high', 'growing_slow_temp_low',
+            'hot_dormancy_temp_high', 'hot_dormancy_temp_low', 'cold_dormancy_temp_high', 'cold_dormancy_temp_low',
+            'lethal_temp_high', 'lethal_temp_low', 'watering_growing', 'watering_slow_growing',
+            'watering_hot_dormancy', 'watering_cold_dormancy', 'soil_moisture_dry_threshold_voltage',
+            'soil_moisture_wet_threshold_voltage', 
+            'watering_days_fast_growth', 'watering_days_slow_growth', 
+            'watering_days_hot_dormancy', 'watering_days_cold_dormancy'
+        ]
+        
+        data['monthly_temps_json'] = monthly_temps_str
+        
         if exists:
-            # Update
-            cursor.execute("""
-                UPDATE plants SET genus=?, species=?, variety=?, image_url=?, origin_country=?, origin_region=?, monthly_temps_json=?, 
-                growing_fast_temp_high=?, growing_fast_temp_low=?, growing_slow_temp_high=?, growing_slow_temp_low=?, 
-                hot_dormancy_temp_high=?, hot_dormancy_temp_low=?, cold_dormancy_temp_high=?, cold_dormancy_temp_low=?, 
-                lethal_temp_high=?, lethal_temp_low=?, watering_growing=?, watering_slow_growing=?, watering_hot_dormancy=?, watering_cold_dormancy=?
-                WHERE plant_id=?
-            """, params)
+            set_clause = ", ".join([f"{col}=?" for col in columns])
+            params = [data.get(col) for col in columns] + [plant_id]
+            cursor.execute(f"UPDATE plants SET {set_clause} WHERE plant_id=?", params)
         else:
-            # Insert
-            cursor.execute("""
-                INSERT INTO plants (genus, species, variety, image_url, origin_country, origin_region, monthly_temps_json, 
-                growing_fast_temp_high, growing_fast_temp_low, growing_slow_temp_high, growing_slow_temp_low, 
-                hot_dormancy_temp_high, hot_dormancy_temp_low, cold_dormancy_temp_high, cold_dormancy_temp_low, 
-                lethal_temp_high, lethal_temp_low, watering_growing, watering_slow_growing, watering_hot_dormancy, watering_cold_dormancy, plant_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, params)
+            all_columns = columns + ['plant_id']
+            placeholders = ", ".join(["?" for _ in all_columns])
+            params = [data.get(col) for col in columns] + [plant_id]
+            cursor.execute(f"INSERT INTO plants ({', '.join(all_columns)}) VALUES ({placeholders})", params)
         
         conn.commit()
         conn.close()

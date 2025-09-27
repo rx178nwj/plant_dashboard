@@ -74,7 +74,6 @@ async function updateHistoryChart(deviceId, period, chartInstances, selectedDate
         const response = await fetch(`/api/history/${deviceId}?period=${period}&date=${selectedDate}`);
         if (!response.ok) throw new Error(`API request failed`);
         
-        // APIからのレスポンスは { history: [], thresholds: {} } という形式
         const responseData = await response.json();
         const historyData = responseData.history; 
 
@@ -190,16 +189,20 @@ function updatePlantCards(plants) {
         updateElementText(`growth-${plantId}`, growthText);
         updateElementText(`watering-${plantId}`, analysis.watering_advice || 'N/A');
         
-        // Update watering advice visual cue
+        // Update watering advice visual cue based on watering_status
         const wateringAdviceEl = document.getElementById(`watering-${plantId}`);
         if (wateringAdviceEl) {
             const parentBadge = wateringAdviceEl.closest('.badge');
             if (parentBadge) {
                 parentBadge.classList.remove('bg-primary', 'text-white', 'bg-light', 'text-dark');
-                if (analysis.watering_advice && analysis.watering_advice.toLowerCase().includes('needed')) {
+                const icon = parentBadge.querySelector('i');
+                
+                if (analysis.watering_status === 'needed') {
                     parentBadge.classList.add('bg-primary', 'text-white');
+                    if (icon) icon.className = 'bi bi-exclamation-triangle-fill me-1';
                 } else {
                      parentBadge.classList.add('bg-light', 'text-dark');
+                     if (icon) icon.className = 'bi bi-water';
                 }
             }
         }
@@ -213,4 +216,3 @@ function updateElementText(id, text) {
         element.textContent = text;
     }
 }
-

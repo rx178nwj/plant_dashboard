@@ -1,0 +1,106 @@
+{% extends "layout.html" %}
+
+{% block title %}Watering Profiles{% endblock %}
+
+{% block content %}
+<div id="watering-profiles-page">
+    <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+        <h1 class="h2">Watering Profile Editor</h1>
+    </div>
+
+    <div class="alert alert-info" role="alert">
+        <i class="bi bi-info-circle-fill"></i>
+        Select a plant to view its soil moisture history and configure watering thresholds. The chart displays the last 30 days of data.
+    </div>
+
+    <div class="row">
+        <!-- Left Column: Plant List -->
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header">
+                    Plants with Soil Sensors
+                </div>
+                <div id="plant-list-profiles" class="list-group list-group-flush">
+                    {% for plant in plants_with_sensors %}
+                    <a href="#" class="list-group-item list-group-item-action" 
+                       data-managed-plant-id="{{ plant.managed_plant_id }}" 
+                       data-library-plant-id="{{ plant.library_plant_id }}"
+                       data-sensor-id="{{ plant.assigned_plant_sensor_id }}">
+                        {{ plant.plant_name }}
+                    </a>
+                    {% else %}
+                    <div class="list-group-item">No plants with assigned soil sensors found.</div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Column: Editor Area -->
+        <div class="col-md-8">
+            <div id="editor-area-profiles" class="card" style="display: none;">
+                <div class="card-header">
+                    <h5 class="mb-0" id="editor-title-profiles"></h5>
+                </div>
+                <div class="card-body">
+                    <!-- Chart -->
+                    <div class="position-relative mb-4" style="height:300px">
+                        <canvas id="soil-history-chart"></canvas>
+                        <div id="chart-loader-profiles" class="position-absolute top-50 start-50 translate-middle d-none">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Form -->
+                    <form id="watering-profile-form">
+                        <input type="hidden" id="library-plant-id-input">
+                        <h6><i class="bi bi-sliders"></i> Moisture Thresholds</h6>
+                        <div class="row align-items-center">
+                            <div class="col-md-6 mb-3">
+                                <label for="dry-threshold" class="form-label">Dry Threshold (V)</label>
+                                <input type="number" step="0.01" id="dry-threshold" class="form-control">
+                                <div class="form-text">Soil is considered "dry" above this voltage.</div>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="wet-threshold" class="form-label">Wet Threshold (V)</label>
+                                <input type="number" step="0.01" id="wet-threshold" class="form-control">
+                                <div class="form-text">Soil is considered "wet" below this voltage.</div>
+                            </div>
+                        </div>
+                        <hr>
+                        <h6><i class="bi bi-calendar-check"></i> Watering Threshold (Consecutive Dry Days)</h6>
+                        <div class="form-text mb-2">Set how many consecutive "dry" days must pass in each growth period before a watering recommendation is made.</div>
+                        <div class="row">
+                            <div class="col-md-3 mb-3">
+                                <label for="watering-days-fast-growth" class="form-label">Fast Growth</label>
+                                <input type="number" id="watering-days-fast-growth" class="form-control">
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <label for="watering-days-slow-growth" class="form-label">Slow Growth</label>
+                                <input type="number" id="watering-days-slow-growth" class="form-control">
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <label for="watering-days-hot-dormancy" class="form-label">Hot Dormancy</label>
+                                <input type="number" id="watering-days-hot-dormancy" class="form-control">
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <label for="watering-days-cold-dormancy" class="form-label">Cold Dormancy</label>
+                                <input type="number" id="watering-days-cold-dormancy" class="form-control">
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="card-footer text-end">
+                    <button class="btn btn-primary" id="save-profile-btn">Save Profile</button>
+                </div>
+            </div>
+            <div id="editor-placeholder-profiles" class="text-center text-muted pt-5">
+                <p><i class="bi bi-arrow-left-circle fs-1"></i></p>
+                <h4>Select a plant to begin</h4>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+

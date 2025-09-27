@@ -69,8 +69,9 @@
                                         <i class="bi bi-sun"></i> Growth: 
                                         <strong id="growth-{{ plant_item.managed_plant_id }}">{{ plant_item.analysis.growth_period | replace('_', ' ') | title | default('Unknown') }}</strong>
                                     </span>
-                                    <span class="badge {% if plant_item.analysis.watering_advice and 'needed' in plant_item.analysis.watering_advice|lower %}bg-primary text-white{% else %}bg-light text-dark{% endif %}">
-                                        <i class="bi bi-water"></i> Advice: 
+                                    <span class="badge {% if plant_item.analysis.watering_status == 'needed' %}bg-primary text-white{% else %}bg-light text-dark{% endif %}">
+                                        {% if plant_item.analysis.watering_status == 'needed' %}<i class="bi bi-exclamation-triangle-fill me-1"></i>{% else %}<i class="bi bi-water"></i>{% endif %}
+                                        Advice: 
                                         <strong id="watering-{{ plant_item.managed_plant_id }}">{{ plant_item.analysis.watering_advice | default('N/A') }}</strong>
                                     </span>
                                 </div>
@@ -109,26 +110,6 @@
                         <button type="button" class="btn btn-outline-secondary period-btn" data-period="30d" data-device-id="{{ switchbot.device_id }}">1M</button>
                         <button type="button" class="btn btn-outline-secondary period-btn" data-period="1y" data-device-id="{{ switchbot.device_id }}">1Y</button>
                     </div>
-                    <!-- ▼▼▼ ADD CHECKBOXES HERE ▼▼▼ -->
-                    <div class="d-flex flex-wrap justify-content-center small mb-2 chart-options" id="chart-options-{{ switchbot.device_id }}" style="display: none;">
-                        <div class="form-check form-switch me-3">
-                            <input class="form-check-input" type="checkbox" role="switch" id="toggle-fast_growth-{{ switchbot.device_id }}" data-dataset-label="Fast Growth Range" checked>
-                            <label class="form-check-label" for="toggle-fast_growth-{{ switchbot.device_id }}"><span class="badge" style="background-color: rgba(40, 167, 69, 0.5); color: white;">Fast Growth</span></label>
-                        </div>
-                        <div class="form-check form-switch me-3">
-                            <input class="form-check-input" type="checkbox" role="switch" id="toggle-slow_growth-{{ switchbot.device_id }}" data-dataset-label="Slow Growth Range" checked>
-                            <label class="form-check-label" for="toggle-slow_growth-{{ switchbot.device_id }}"><span class="badge" style="background-color: rgba(25, 135, 84, 0.5); color: white;">Slow Growth</span></label>
-                        </div>
-                        <div class="form-check form-switch me-3">
-                            <input class="form-check-input" type="checkbox" role="switch" id="toggle-hot_dormancy-{{ switchbot.device_id }}" data-dataset-label="Hot Dormancy Range" checked>
-                            <label class="form-check-label" for="toggle-hot_dormancy-{{ switchbot.device_id }}"><span class="badge" style="background-color: rgba(255, 193, 7, 0.5); color: #333;">Hot Dormancy</span></label>
-                        </div>
-                        <div class="form-check form-switch">
-                            <input class="form-check-input" type="checkbox" role="switch" id="toggle-cold_dormancy-{{ switchbot.device_id }}" data-dataset-label="Cold Dormancy Range" checked>
-                            <label class="form-check-label" for="toggle-cold_dormancy-{{ switchbot.device_id }}"><span class="badge" style="background-color: rgba(13, 202, 240, 0.5); color: #333;">Cold Dormancy</span></label>
-                        </div>
-                    </div>
-                    <!-- ▲▲▲ END CHECKBOXES ▲▲▲ -->
                     <div class="position-relative" style="height:300px">
                         <canvas id="history-chart-{{ switchbot.device_id }}"></canvas>
                         <div id="chart-loader-{{ switchbot.device_id }}" class="position-absolute top-50 start-50 translate-middle d-none">
@@ -148,4 +129,3 @@
     </div>
 </div>
 {% endblock %}
-

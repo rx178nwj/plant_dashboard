@@ -51,7 +51,7 @@ def get_plant_centric_data(selected_date_str):
 
         # 分析結果を取得
         analysis = conn.execute("""
-            SELECT growth_period, watering_advice, survival_limit_status
+            SELECT growth_period, watering_advice, watering_status, survival_limit_status
             FROM daily_plant_analysis
             WHERE managed_plant_id = ? AND analysis_date <= ?
             ORDER BY analysis_date DESC LIMIT 1
@@ -333,4 +333,3 @@ def stream():
             time.sleep(5)
             
     return Response(event_stream(), mimetype='text/event-stream')
-

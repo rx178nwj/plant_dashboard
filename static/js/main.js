@@ -21,10 +21,10 @@ document.addEventListener('DOMContentLoaded', function() {
     if (document.getElementById('plants-page')) {
         initializePlantLibrary();
     }
+    if (document.getElementById('watering-profiles-page')) {
+        initializeWateringProfiles();
+    }
     if (document.getElementById('management-page')) {
         initializeManagementDashboard();
     }
 });
-
-
-
