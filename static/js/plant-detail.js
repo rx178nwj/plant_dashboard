@@ -1,6 +1,82 @@
 // plant_dashboard/static/js/plant-detail.js
 
 /**
+ * Renders the monthly native climate chart.
+ * @param {HTMLElement} canvas The canvas element for the chart.
+ */
+function renderMonthlyClimateChart(canvas) {
+    if (!canvas) return;
+    
+    const tempsDataString = canvas.dataset.monthlyTemps;
+    if (!tempsDataString || tempsDataString === 'null') {
+        console.log("No monthly climate data to render.");
+        return;
+    }
+
+    try {
+        // Jinja's tojson filter on a string results in a double-encoded string
+        const temps = JSON.parse(JSON.parse(tempsDataString)); 
+        
+        if (!temps || typeof temps !== 'object') {
+            throw new Error("Parsed climate data is not a valid object.");
+        }
+        
+        const months = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+        const labels = months.map(m => m.charAt(0).toUpperCase() + m.slice(1));
+
+        const datasets = [{
+            label: 'High (°C)',
+            data: months.map(m => temps[m]?.high ?? null),
+            borderColor: 'rgba(255, 99, 132, 1)',
+            backgroundColor: 'rgba(255, 99, 132, 0.2)',
+            tension: 0.1,
+            fill: false,
+        }, {
+            label: 'Avg (°C)',
+            data: months.map(m => temps[m]?.avg ?? null),
+            borderColor: 'rgba(54, 162, 235, 1)',
+            backgroundColor: 'rgba(54, 162, 235, 0.2)',
+            tension: 0.1,
+            fill: false,
+            borderWidth: 3,
+        }, {
+            label: 'Low (°C)',
+            data: months.map(m => temps[m]?.low ?? null),
+            borderColor: 'rgba(75, 192, 192, 1)',
+            backgroundColor: 'rgba(75, 192, 192, 0.2)',
+            tension: 0.1,
+            fill: false,
+        }];
+
+        new Chart(canvas.getContext('2d'), {
+            type: 'line',
+            data: { labels, datasets },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { 
+                    title: { display: false },
+                    legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 10 } } }
+                },
+                scales: { 
+                    y: { 
+                        title: { display: true, text: '°C' } 
+                    } 
+                }
+            }
+        });
+
+    } catch (e) {
+        console.error("Failed to parse or render monthly climate chart:", e);
+        const ctx = canvas.getContext('2d');
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#6c757d';
+        ctx.fillText('Could not load climate data.', canvas.width / 2, canvas.height / 2);
+    }
+}
+
+
+/**
  * 詳細ページのすべてのグラフ（日別集計とセンサー）を初期化します。
  */
 function initializeDetailCharts() {
@@ -105,6 +181,10 @@ function initializeDetailCharts() {
             datePicker.addEventListener('change', updateChartFromSensorControls);
         }
     }
+
+    // --- 3. Native Climate Chart Initialization ---
+    const climateChartCanvas = document.getElementById('monthly-climate-chart');
+    renderMonthlyClimateChart(climateChartCanvas);
 }
 
 
@@ -488,4 +568,3 @@ async function updateSensorHistoryChart(deviceId, period, chartInstances, select
         canvas.style.visibility = 'visible';
     }
 }
-

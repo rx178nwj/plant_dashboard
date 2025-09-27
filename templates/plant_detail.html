@@ -102,6 +102,17 @@
                                         {% if plant.lethal_temp_high is not none %}<tr class="table-danger"><th>Lethal High</th><td>{{ plant.lethal_temp_high }}°</td></tr>{% endif %}
                                     </tbody>
                                 </table>
+
+                                <!-- ▼▼▼ ADDED: Climate Chart Container ▼▼▼ -->
+                                {% if plant.monthly_temps_json and plant.monthly_temps_json != 'null' %}
+                                <hr>
+                                <h6 class="card-subtitle mb-2 text-muted">Native Climate Chart (°C)</h6>
+                                <div class="position-relative" style="height:250px">
+                                    <canvas id="monthly-climate-chart" data-monthly-temps='{{ plant.monthly_temps_json | tojson | safe }}'></canvas>
+                                </div>
+                                {% endif %}
+                                <!-- ▲▲▲ END: Climate Chart Container ▲▲▲ -->
+
                            {% else %}
                                 <p class="text-muted">No library profile linked. <a href="{{ url_for('management.management')}}">Link one now</a>.</p>
                            {% endif %}
@@ -285,4 +296,3 @@
 }
 </style>
 {% endblock %}
-
