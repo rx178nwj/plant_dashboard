@@ -14,7 +14,6 @@
     </div>
 
     <div class="row">
-        <!-- Left Column: Plant List -->
         <div class="col-md-4">
             <div class="card">
                 <div class="card-header">
@@ -23,7 +22,7 @@
                 <div id="plant-list-profiles" class="list-group list-group-flush">
                     {% for plant in plants_with_sensors %}
                     <a href="#" class="list-group-item list-group-item-action" 
-                       data-managed-plant-id="{{ plant.managed_plant_id }}" 
+                       data-managed-plant-id="{{ plant.managed_plant_id }}"
                        data-library-plant-id="{{ plant.library_plant_id }}"
                        data-sensor-id="{{ plant.assigned_plant_sensor_id }}">
                         {{ plant.plant_name }}
@@ -35,14 +34,12 @@
             </div>
         </div>
 
-        <!-- Right Column: Editor Area -->
         <div class="col-md-8">
             <div id="editor-area-profiles" class="card" style="display: none;">
                 <div class="card-header">
                     <h5 class="mb-0" id="editor-title-profiles"></h5>
                 </div>
                 <div class="card-body">
-                    <!-- Chart -->
                     <div class="position-relative mb-4" style="height:300px">
                         <canvas id="soil-history-chart"></canvas>
                         <div id="chart-loader-profiles" class="position-absolute top-50 start-50 translate-middle d-none">
@@ -52,10 +49,9 @@
                         </div>
                     </div>
 
-                    <!-- Form -->
                     <form id="watering-profile-form">
                         <input type="hidden" id="library-plant-id-input">
-                        <h6><i class="bi bi-sliders"></i> Moisture Thresholds</h6>
+                        <h6><i class="bi bi-sliders"></i> Moisture Thresholds (Voltage)</h6>
                         <div class="row align-items-center">
                             <div class="col-md-6 mb-3">
                                 <label for="dry-threshold" class="form-label">Dry Threshold (V)</label>
@@ -69,7 +65,7 @@
                             </div>
                         </div>
                         <hr>
-                        <h6><i class="bi bi-calendar-check"></i> Watering Threshold (Consecutive Dry Days)</h6>
+                        <h6><i class="bi bi-calendar-check"></i> Watering Trigger (Consecutive Dry Days)</h6>
                         <div class="form-text mb-2">Set how many consecutive "dry" days must pass in each growth period before a watering recommendation is made.</div>
                         <div class="row">
                             <div class="col-md-3 mb-3">
@@ -91,8 +87,9 @@
                         </div>
                     </form>
                 </div>
-                <div class="card-footer text-end">
-                    <button class="btn btn-primary" id="save-profile-btn">Save Profile</button>
+                <div class="card-footer d-flex justify-content-between">
+                    <button class="btn btn-secondary" id="write-profile-btn"><i class="bi bi-bluetooth"></i> Write to Device</button>
+                    <button class="btn btn-primary" id="save-profile-btn">Save Profile to DB</button>
                 </div>
             </div>
             <div id="editor-placeholder-profiles" class="text-center text-muted pt-5">
@@ -103,4 +100,3 @@
     </div>
 </div>
 {% endblock %}
-

@@ -13,12 +13,12 @@ import config
 PLANT_SERVICE_UUID = config.TARGET_SERVICE_UUID
 COMMAND_CHAR_UUID = "6a3b2c1d-4e5f-6a7b-8c9d-e0f123456791"
 RESPONSE_CHAR_UUID = "6a3b2c1d-4e5f-6a7b-8c9d-e0f123456792"
-
 SWITCHBOT_LEGACY_METER_UUID = "cba20d00-224d-11e6-9fb8-0002a5d5c51b"
 SWITCHBOT_COMMON_SERVICE_UUID = "0000fd3d-0000-1000-8000-00805f9b34fb"
 
 # --- コマンド定義 ---
 CMD_GET_SENSOR_DATA = 0x01
+CMD_SET_WATERING_THRESHOLDS = 0x02
 
 logger = logging.getLogger(__name__)
 
@@ -46,8 +46,11 @@ class PlantDeviceBLE:
             logger.info(f"[{self.device_id}] Device found, proceeding with connection.")
             await self.client.connect(timeout=10.0)
             self.is_connected = self.client.is_connected
-            logger.info(f"[{self.device_id}] Connection successful.")
-            return True
+            if self.is_connected:
+                logger.info(f"[{self.device_id}] Connection successful.")
+            else:
+                logger.warning(f"[{self.device_id}] Connection attempt failed.")
+            return self.is_connected
         except (BleakError, asyncio.TimeoutError) as e:
             logger.error(f"[{self.device_id}] Failed to connect: {e}")
             self.is_connected = False
@@ -78,6 +81,52 @@ class PlantDeviceBLE:
         logger.error(f"[{self.device_id}] Failed to reconnect after {config.RECONNECT_ATTEMPTS} attempts.")
         return False
     
+    async def set_watering_thresholds(self, dry_threshold_mv, wet_threshold_mv):
+        """
+        水やり閾値をデバイスに書き込みます。
+        """
+        if not await self.ensure_connection():
+            return False
+
+        notification_received = asyncio.Event()
+        success = False
+
+        def notification_handler(sender: int, data: bytearray):
+            nonlocal success
+            logger.debug(f"[{self.device_id}] Write Response from {sender}: {data.hex()}")
+            if len(data) >= 3:
+                resp_id, status_code, resp_seq = struct.unpack('<BBB', data[:3])
+                if resp_id == CMD_SET_WATERING_THRESHOLDS and status_code == 0 and resp_seq == self.sequence_num:
+                    success = True
+                    logger.info(f"[{self.device_id}] Successfully received confirmation for setting thresholds.")
+            notification_received.set()
+
+        try:
+            await self.client.start_notify(RESPONSE_CHAR_UUID, notification_handler)
+
+            self.sequence_num = (self.sequence_num + 1) % 256
+            payload = struct.pack('<HH', int(dry_threshold_mv), int(wet_threshold_mv))
+            command_packet = struct.pack('<BBH', CMD_SET_WATERING_THRESHOLDS, self.sequence_num, len(payload)) + payload
+            
+            logger.info(f"[{self.device_id}] Writing watering thresholds to {COMMAND_CHAR_UUID}: {command_packet.hex()}")
+            await self.client.write_gatt_char(COMMAND_CHAR_UUID, command_packet)
+            
+            logger.debug(f"[{self.device_id}] Waiting for write confirmation...")
+            await asyncio.wait_for(notification_received.wait(), timeout=10.0)
+            
+            return success
+
+        except asyncio.TimeoutError:
+            logger.error(f"[{self.device_id}] Timed out waiting for write response.")
+            return False
+        except BleakError as e:
+            logger.error(f"[{self.device_id}] BLE error while writing thresholds: {e}")
+            self.is_connected = False
+            return False
+        finally:
+            if self.client.is_connected:
+                await self.client.stop_notify(RESPONSE_CHAR_UUID)
+
     async def get_sensor_data(self):
         """
         コマンドを書き込み、別のキャラクタリスティックからの通知でレスポンスを受け取る。
@@ -127,15 +176,12 @@ class PlantDeviceBLE:
                 logger.error(f"[{self.device_id}] Payload length mismatch. Header says {data_len}, but got {len(payload)}")
                 return None
 
-            # C言語の `struct tm` (9つのint) + 4つのfloat + 1つのbool + 3バイトのパディングに合わせてデータを展開
             if data_len == 56:
                 unpacked_data = struct.unpack('<9i4f?3x', payload)
                 
                 tm_sec, tm_min, tm_hour, tm_mday, tm_mon, tm_year, tm_wday, tm_yday, tm_isdst, \
                 lux, temp, humidity, soil, error = unpacked_data
 
-                # Cのtm構造体からPythonのdatetimeオブジェクトへ変換
-                # tm_yearは1900からの年数, tm_monは0-11
                 dt = datetime(tm_year + 1900, tm_mon + 1, tm_mday, tm_hour, tm_min, tm_sec)
                 dt_str = dt.strftime("%Y-%m-%d %H:%M:%S")
 
@@ -146,7 +192,7 @@ class PlantDeviceBLE:
             sensor_data = {
                 'datetime': dt_str, 'light_lux': lux, 'temperature': temp,
                 'humidity': humidity, 'soil_moisture': soil, 'sensor_error': error,
-                'battery_level': None # このペイロードにはバッテリー情報はない
+                'battery_level': None
             }
             
             logger.info(f"[{self.device_id}] Successfully parsed data from notification: {sensor_data}")
@@ -160,7 +206,7 @@ class PlantDeviceBLE:
             self.is_connected = False
             return None
         except struct.error as e:
-            logger.error(f"[{self.device_id}] Failed to unpack response data: {e}. Payload was {payload.hex()}")
+            logger.error(f"[{self.device_id}] Failed to unpack response data: {e}. Payload was {payload.hex() if 'payload' in locals() else 'N/A'}")
             return None
         except Exception as e:
             logger.error(f"[{self.device_id}] An unexpected error occurred in get_sensor_data: {e}")
@@ -176,22 +222,23 @@ class PlantDeviceBLE:
 
 
 def _parse_switchbot_adv_data(adv_data):
+    """SwitchBotのAdvertisingデータを解析する内部ヘルパー関数"""
     if SWITCHBOT_COMMON_SERVICE_UUID in adv_data.service_data:
         service_data = adv_data.service_data[SWITCHBOT_COMMON_SERVICE_UUID]
         model = service_data[0] & 0b01111111
         battery = service_data[1] & 0b01111111
-        if model == 0x69:
+        if model == 0x69: # SwitchBot Meter Plus
             temperature = (service_data[3] & 0b00001111) / 10.0 + (service_data[4] & 0b01111111)
             if not (service_data[4] & 0b10000000):
                 temperature = -temperature
             humidity = service_data[5] & 0b01111111
             return {'type': 'switchbot_meter_plus', 'data': {'temperature': temperature, 'humidity': humidity, 'battery_level': battery}}
-        elif model == 0x63:
+        elif model == 0x63: # SwitchBot CO2 Meter
             temperature = (service_data[5] & 0b01111111) + (service_data[4] / 10.0)
             humidity = service_data[6] & 0b01111111
             co2 = int.from_bytes(service_data[7:9], 'little')
             return {'type': 'switchbot_co2_meter', 'data': {'temperature': temperature, 'humidity': humidity, 'co2': co2, 'battery_level': battery}}
-    elif SWITCHBOT_LEGACY_METER_UUID in adv_data.service_data:
+    elif SWITCHBOT_LEGACY_METER_UUID in adv_data.service_data: # SwitchBot Meter (Legacy)
         service_data = adv_data.service_data[SWITCHBOT_LEGACY_METER_UUID]
         battery = service_data[2] & 0b01111111
         is_temp_above_freezing = service_data[4] & 0b10000000
@@ -204,6 +251,7 @@ def _parse_switchbot_adv_data(adv_data):
     return None
 
 async def scan_devices():
+    """周辺のBLEデバイスをスキャンして結果を返す"""
     logger.info("Scanning for devices...")
     found_devices = []
     try:
@@ -221,6 +269,7 @@ async def scan_devices():
     return found_devices
 
 async def get_switchbot_adv_data(mac_address: str):
+    """指定されたMACアドレスのSwitchBotデバイスのアドバタイズデータをスキャンして取得する"""
     logger.debug(f"Scanning for 5 seconds to find {mac_address}...")
     try:
         devices = await BleakScanner.discover(timeout=5.0, return_adv=True)

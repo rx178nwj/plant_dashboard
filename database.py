@@ -130,9 +130,8 @@ def init_db():
 
     conn.commit()
     conn.close()
-    print("Database initialization and migration check completed.")
+    logger.info("Database initialization and migration check completed.")
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     init_db()
-

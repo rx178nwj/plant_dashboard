@@ -1,10 +1,15 @@
 # blueprints/management/routes.py
-from flask import Blueprint, render_template, jsonify, request
+from flask import Blueprint, render_template, jsonify, request, Response
 import device_manager as dm
 import uuid
+import json
 from blueprints.dashboard.routes import requires_auth
+from ble_manager import PlantDeviceBLE
+import asyncio
 
 management_bp = Blueprint('management', __name__, template_folder='../../templates')
+
+COMMAND_PIPE_PATH = "/tmp/plant_dashboard_cmd_pipe.jsonl"
 
 @management_bp.route('/management')
 @requires_auth
@@ -39,6 +44,37 @@ def watering_profiles():
     """).fetchall()
     conn.close()
     return render_template('watering_profiles.html', plants_with_sensors=plants_with_sensors)
+
+@management_bp.route('/api/device/<device_id>/write-watering-profile', methods=['POST'])
+@requires_auth
+def api_write_watering_profile(device_id):
+    """
+    指定されたデバイスに水やり閾値を書き込むためのコマンドを送信します。
+    """
+    data = request.json
+    dry_threshold = data.get('dry_threshold')
+    wet_threshold = data.get('wet_threshold')
+
+    if dry_threshold is None or wet_threshold is None:
+        return jsonify({'success': False, 'message': 'Missing threshold data.'}), 400
+
+    command = {
+        "command": "set_watering_thresholds",
+        "device_id": device_id,
+        "payload": {
+            "dry_threshold": dry_threshold,
+            "wet_threshold": wet_threshold
+        }
+    }
+
+    try:
+        # コマンドパイプにコマンドを追記
+        with open(COMMAND_PIPE_PATH, "a") as f:
+            f.write(json.dumps(command) + "\n")
+        return jsonify({'success': True, 'message': 'Command sent to daemon.'})
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'Failed to write command to pipe: {e}'}), 500
+
 
 @management_bp.route('/api/managed-plant-watering-profile/<managed_plant_id>', methods=['GET', 'POST'])
 @requires_auth
@@ -164,3 +200,4 @@ def api_delete_managed_plant(managed_plant_id):
         return jsonify({'success': True, 'message': 'Plant deleted successfully.'})
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 500
+
