@@ -18,3 +18,4 @@ __pycache__/
 *.pyd
 uploads/plant_images/*
 __pycache__/
+static/uploads/plant_images/*
