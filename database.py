@@ -27,7 +27,8 @@ def migrate_db_schema(cursor):
         'watering_days_fast_growth': 'INTEGER',
         'watering_days_slow_growth': 'INTEGER',
         'watering_days_hot_dormancy': 'INTEGER',
-        'watering_days_cold_dormancy': 'INTEGER'
+        'watering_days_cold_dormancy': 'INTEGER',
+        'image_url': 'TEXT'
     }
     
     for col_name, col_type in managed_new_columns.items():
@@ -90,6 +91,7 @@ def init_db():
         watering_days_slow_growth INTEGER,
         watering_days_hot_dormancy INTEGER,
         watering_days_cold_dormancy INTEGER,
+        image_url TEXT,
         FOREIGN KEY (library_plant_id) REFERENCES plants(plant_id),
         FOREIGN KEY (assigned_plant_sensor_id) REFERENCES devices(device_id),
         FOREIGN KEY (assigned_switchbot_id) REFERENCES devices(device_id)

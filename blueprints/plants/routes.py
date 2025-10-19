@@ -4,11 +4,13 @@ import device_manager as dm
 import json
 import uuid
 import os
-import httpx 
+import httpx
+import logging
 from werkzeug.utils import secure_filename
 from blueprints.dashboard.routes import requires_auth
 
 plants_bp = Blueprint('plants', __name__, template_folder='../../templates')
+logger = logging.getLogger(__name__)
 
 @plants_bp.route('/plants')
 @requires_auth
@@ -150,7 +152,7 @@ def api_plant_lookup():
           "growing_fast_temp_high": integer, "growing_fast_temp_low": integer,
           "growing_slow_temp_high": integer, "growing_slow_temp_low": integer,
           "hot_dormancy_temp_high": integer, "hot_dormancy_temp_low": integer,
-          "cold_dormancy_temp_high": integer, "cold_dormancy_temp_low": integer,
+          "cold_dormancy_temp_high": integer, "cold_dormancy_temp_low": integer,dddddddddddd
           "lethal_temp_high": integer, "lethal_temp_low": integer,
           "watering_growing": "string", "watering_slow_growing": "string",
           "watering_hot_dormancy": "string", "watering_cold_dormancy": "string",
@@ -159,6 +161,7 @@ def api_plant_lookup():
         """
         api_key = current_app.config.get('GEMINI_API_KEY')
         if not api_key or api_key == 'YOUR_API_KEY_HERE':
+            logger.error("Gemini API key is not configured.")
             raise ValueError("Gemini API key is not configured")
 
         api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key={api_key}"

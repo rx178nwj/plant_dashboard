@@ -1,11 +1,16 @@
 # blueprints/devices/routes.py
-from flask import Blueprint, render_template, jsonify, request
+from flask import Blueprint, render_template, jsonify, request, Response
 import asyncio
+import json
+import logging
 import device_manager as dm
 from ble_manager import scan_devices as ble_scan
 from blueprints.dashboard.routes import requires_auth
+import config  # configをインポート
 
 devices_bp = Blueprint('devices', __name__, template_folder='../../templates')
+logger = logging.getLogger(__name__)
+
 
 @devices_bp.route('/devices')
 @requires_auth
@@ -16,17 +21,19 @@ def devices():
     conn.close()
     return render_template('devices.html', registered_devices=registered_devices)
 
+
 @devices_bp.route('/api/ble-scan', methods=['POST'])
 @requires_auth
 def api_ble_scan():
     """周辺のBLEデバイスをスキャンして結果を返します。"""
     try:
-        # 비동기 함수인 ble_scan을 실행하고 결과를 기다립니다.
+        # 非同期関数であるble_scanを実行し、結果を待つ
         devices = asyncio.run(ble_scan())
         return jsonify({'success': True, 'devices': devices})
     except Exception as e:
-        # logger.error(f"BLE scan failed: {e}")
+        logger.error(f"BLEスキャンに失敗しました: {e}", exc_info=True)
         return jsonify({'success': False, 'message': str(e)}), 500
+
 
 @devices_bp.route('/api/add-device', methods=['POST'])
 @requires_auth
@@ -35,7 +42,7 @@ def api_add_device():
     data = request.json
     try:
         conn = dm.get_db_connection()
-        # ユニークなIDを生成（MACアドレスの末尾6桁を使用）
+        # MACアドレスの末尾6桁を使用してユニークなIDを生成
         device_id = f"dev_{data['mac_address'].replace(':', '')[-6:].lower()}"
         conn.execute(
             "INSERT INTO devices (device_id, device_name, mac_address, device_type) VALUES (?, ?, ?, ?)",
@@ -44,8 +51,49 @@ def api_add_device():
         conn.commit()
         conn.close()
         dm.load_devices_from_db()  # メモリ上のデバイスリストを再読み込み
-        return jsonify({'success': True, 'message': 'Device added successfully.'})
+        return jsonify({'success': True, 'message': 'デバイスが正常に追加されました。'})
     except Exception as e:
-        # logger.error(f"Failed to add device: {e}")
+        logger.error(f"デバイスの追加に失敗しました: {e}", exc_info=True)
         # データベースの一意性制約エラーなどを考慮
-        return jsonify({'success': False, 'message': f'Failed to add device: {e}'}), 500
+        return jsonify({'success': False, 'message': f'デバイスの追加に失敗しました: {e}'}), 500
+
+
+@devices_bp.route('/api/device/<sensor_id>/write-watering-profile', methods=['POST'])
+@requires_auth
+def api_write_watering_profile(sensor_id):
+    """デバイスに水やりプロファイルを書き込むためのコマンドを送信します。"""
+
+    logger.info(f"Received request to write watering profile for sensor_id: {sensor_id}")
+    
+    data = request.json
+    conn = dm.get_db_connection()
+    # sensor_idは、このアプリケーションではdevice_idと同じものとして扱います
+    device = conn.execute('SELECT device_id FROM devices WHERE device_id = ?', (sensor_id,)).fetchone()
+    conn.close()
+
+    if not device:
+        response_data = json.dumps({'success': False, 'message': '指定されたデバイスが見つかりません。'})
+        return Response(response_data, status=404, mimetype='application/json')
+
+    try:
+        command = {
+            "command": "set_watering_thresholds",
+            "device_id": device['device_id'],
+            "payload": {
+                "dry_threshold": data.get('dry_threshold'),
+                "wet_threshold": data.get('wet_threshold')
+            }
+        }
+        # configからパイプのパスを読み込む
+        with open(config.COMMAND_PIPE_PATH, "a") as f:
+            f.write(json.dumps(command) + "\n")
+        
+        logger.info(f"デバイス {sensor_id} への水やり設定書き込みコマンドをキューに追加しました。")
+        response_data = json.dumps({'success': True, 'message': 'デバイスへの書き込みコマンドを受け付けました。'})
+        return Response(response_data, status=200, mimetype='application/json')
+
+    except Exception as e:
+        logger.error(f"コマンドのデーモンへの送信に失敗: {e}", exc_info=True)
+        response_data = json.dumps({'success': False, 'message': f'サーバー内部でエラーが発生しました: {e}'})
+        return Response(response_data, status=500, mimetype='application/json')
+

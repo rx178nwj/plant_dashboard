@@ -14,7 +14,8 @@ from database import get_db_connection
 
 # データ連携用の一時ファイルパス
 DATA_PIPE_PATH = "/tmp/plant_dashboard_pipe.jsonl"
-COMMAND_PIPE_PATH = "/tmp/plant_dashboard_cmd_pipe.jsonl" # コマンド用パイプ
+# コマンド用パイプのパスをconfigから読み込む
+COMMAND_PIPE_PATH = config.COMMAND_PIPE_PATH
 
 logging.basicConfig(
     level=config.LOG_LEVEL,
@@ -27,7 +28,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-# --- Functions moved from ble_manager.py to resolve ImportError ---
+# --- ble_manager.pyから移動した関数群 ---
 
 SWITCHBOT_LEGACY_METER_UUID = "cba20d00-224d-11e6-9fb8-0002a5d5c51b"
 SWITCHBOT_COMMON_SERVICE_UUID = "0000fd3d-0000-1000-8000-00805f9b34fb"
@@ -63,7 +64,7 @@ def _parse_switchbot_adv_data(adv_data):
 
 async def get_switchbot_adv_data(mac_address: str):
     """指定されたMACアドレスのSwitchBotデバイスのアドバタイズデータをスキャンして取得する"""
-    logger.debug(f"Scanning for 5 seconds to find {mac_address}...")
+    logger.debug(f"{mac_address} を見つけるために5秒間スキャンします...")
     try:
         devices = await BleakScanner.discover(timeout=5.0, return_adv=True)
         target_device_info = devices.get(mac_address.upper())
@@ -72,23 +73,23 @@ async def get_switchbot_adv_data(mac_address: str):
             if adv_data:
                 switchbot_info = _parse_switchbot_adv_data(adv_data)
                 if switchbot_info:
-                    logger.debug(f"Successfully parsed data for {mac_address}")
+                    logger.debug(f"{mac_address} のデータを正常に解析しました")
                     return switchbot_info.get('data')
                 else:
-                    logger.warning(f"Found {mac_address}, but could not parse SwitchBot data from its advertisement.")
+                    logger.warning(f"{mac_address} を見つけましたが、アドバタイズデータからSwitchBotのデータを解析できませんでした。")
             else:
-                logger.warning(f"Found {mac_address} but it had no advertisement data.")
+                logger.warning(f"{mac_address} を見つけましたが、アドバタイズデータがありませんでした。")
         else:
-            logger.warning(f"Device {mac_address} not found during the 5-second scan.")
+            logger.warning(f"5秒間のスキャンでデバイス {mac_address} が見つかりませんでした。")
         return None
     except BleakError as e:
-        logger.error(f"A BleakError occurred while scanning for {mac_address}: {e}")
+        logger.error(f"{mac_address} のスキャン中にBleakErrorが発生しました: {e}")
         return None
     except Exception as e:
-        logger.error(f"An unexpected error occurred in get_switchbot_adv_data for {mac_address}: {e}")
+        logger.error(f"get_switchbot_adv_data ({mac_address}) で予期せぬエラーが発生しました: {e}")
         return None
 
-# --- End of moved functions ---
+# --- 移動した関数の終わり ---
 
 
 def get_devices_from_db():
@@ -104,11 +105,11 @@ def write_to_pipe(data):
         with open(DATA_PIPE_PATH, "a") as f:
             f.write(json.dumps(data) + "\n")
     except Exception as e:
-        logger.error(f"Failed to write to data pipe: {e}")
+        logger.error(f"データパイプへの書き込みに失敗しました: {e}")
 
 async def process_commands(plant_connections):
     """コマンドパイプを処理してBLE操作を実行する"""
-    logger.debug("Checking for commands in command pipe...")
+    logger.debug("コマンドパイプ内のコマンドを確認しています...")
     
     if not os.path.exists(COMMAND_PIPE_PATH):
         return
@@ -128,11 +129,11 @@ async def process_commands(plant_connections):
                 device_id = command_data.get("device_id")
                 payload = command_data.get("payload")
 
-                logger.info(f"Received command '{command}' for device {device_id}")
+                logger.info(f"コマンド '{command}' をデバイス {device_id} のために受信しました")
 
                 if command == "set_watering_thresholds":
                     if device_id not in plant_connections:
-                        logger.warning(f"No active connection for {device_id} to set thresholds. Attempting to connect.")
+                        logger.warning(f"{device_id} の有効な接続がないため、閾値を設定できません。接続を試みます。")
                         # データベースからこのデバイスのMACアドレスを再取得
                         conn = get_db_connection()
                         dev_info = conn.execute("SELECT mac_address FROM devices WHERE device_id = ?", (device_id,)).fetchone()
@@ -140,7 +141,7 @@ async def process_commands(plant_connections):
                         if dev_info:
                              plant_connections[device_id] = PlantDeviceBLE(dev_info['mac_address'], device_id)
                         else:
-                             logger.error(f"Device {device_id} not found in database for command execution.")
+                             logger.error(f"コマンド実行のためにデバイス {device_id} がデータベースに見つかりません。")
                              continue
                     
                     ble_device = plant_connections[device_id]
@@ -150,21 +151,21 @@ async def process_commands(plant_connections):
                     if dry_mv is not None and wet_mv is not None:
                         success = await ble_device.set_watering_thresholds(dry_mv, wet_mv)
                         if success:
-                            logger.info(f"Successfully sent thresholds to {device_id}.")
+                            logger.info(f"{device_id} に閾値を正常に送信しました。")
                         else:
-                            logger.error(f"Failed to send thresholds to {device_id}.")
+                            logger.error(f"{device_id} への閾値の送信に失敗しました。")
                     else:
-                        logger.error(f"Invalid payload for set_watering_thresholds: {payload}")
+                        logger.error(f"set_watering_thresholds のペイロードが無効です: {payload}")
 
             except Exception as e:
-                logger.error(f"Error processing command: {line.strip()} - {e}")
+                logger.error(f"コマンド処理中にエラーが発生しました: {line.strip()} - {e}")
     
     os.remove(processing_path)
 
 
 async def main_loop():
     """Bluetoothデバイスのポーリングとコマンド処理を行うメインループ"""
-    logger.info("Starting Bluetooth daemon loop...")
+    logger.info("Bluetoothデーモンループを開始します...")
     plant_sensor_connections = {}
 
     while True:
@@ -174,11 +175,11 @@ async def main_loop():
         devices_to_poll = get_devices_from_db()
         
         if not devices_to_poll:
-            logger.info("No devices configured in the database. Waiting...")
+            logger.info("データベースに設定済みのデバイスがありません。待機します...")
             await asyncio.sleep(config.DATA_FETCH_INTERVAL)
             continue
         
-        logger.info(f"Starting data collection cycle for {len(devices_to_poll)} devices.")
+        logger.info(f"{len(devices_to_poll)} 個のデバイスのデータ収集サイクルを開始します。")
         
         for device in devices_to_poll:
             dev_id = device.get('device_id')
@@ -186,7 +187,7 @@ async def main_loop():
             mac_address = device.get('mac_address')
             sensor_data = None
             
-            logger.info(f"Polling device: {device.get('device_name')} ({dev_id})")
+            logger.info(f"デバイスをポーリング中: {device.get('device_name')} ({dev_id})")
 
             try:
                 if device_type == 'plant_sensor':
@@ -207,7 +208,7 @@ async def main_loop():
                 write_to_pipe(pipe_data)
 
             except Exception as e:
-                logger.error(f"Unhandled error during data collection for {dev_id}: {e}", exc_info=True)
+                logger.error(f"{dev_id} のデータ収集中に未処理のエラーが発生しました: {e}", exc_info=True)
                 # エラー情報もpipeに書き出す
                 write_to_pipe({
                     "device_id": dev_id,
@@ -217,7 +218,7 @@ async def main_loop():
             
             await asyncio.sleep(2) # デバイス間のポーリングに短い遅延
 
-        logger.info(f"Data collection cycle finished. Waiting for {config.DATA_FETCH_INTERVAL} seconds.")
+        logger.info(f"データ収集サイクルが終了しました。{config.DATA_FETCH_INTERVAL} 秒間待機します。")
         await asyncio.sleep(config.DATA_FETCH_INTERVAL)
 
 if __name__ == "__main__":
@@ -229,7 +230,7 @@ if __name__ == "__main__":
             os.remove(COMMAND_PIPE_PATH)
         asyncio.run(main_loop())
     except KeyboardInterrupt:
-        logger.info("Bluetooth daemon stopped by user.")
+        logger.info("Bluetoothデーモンがユーザーによって停止されました。")
     except Exception as e:
-        logger.critical(f"Bluetooth daemon stopped due to a critical error: {e}", exc_info=True)
+        logger.critical(f"重大なエラーによりBluetoothデーモンが停止しました: {e}", exc_info=True)
 
