@@ -8,7 +8,16 @@ function initializeManagementDashboard() {
     const editorArea = document.getElementById('editor-area');
     const placeholder = document.getElementById('editor-placeholder');
     const managementForm = document.getElementById('management-form');
+    const imagePreview = document.getElementById('plant-image-preview');
+    const imageUrlInput = document.getElementById('image-url');
+    const imageUploadInput = document.getElementById('plant-image-upload');
     let managedPlantsData = [];
+
+    const toggleImageSource = () => {
+        const source = document.querySelector('input[name="image-source"]:checked').value;
+        document.getElementById('image-url-group').style.display = (source === 'url') ? 'block' : 'none';
+        document.getElementById('image-upload-group').style.display = (source === 'upload') ? 'block' : 'none';
+    };
 
     const loadManagedPlants = async () => {
         try {
@@ -29,6 +38,9 @@ function initializeManagementDashboard() {
         managementForm.reset();
         document.getElementById('managed-plant-id').value = '';
         document.getElementById('editor-title').textContent = 'Add New Managed Plant';
+        imagePreview.src = 'https://placehold.co/600x300/eee/ccc?text=Plant+Image';
+        document.getElementById('image-source-url').checked = true;
+        toggleImageSource();
         placeholder.style.display = 'none';
         editorArea.style.display = 'block';
     });
@@ -54,10 +66,28 @@ function initializeManagementDashboard() {
             library_plant_id: document.getElementById('library-plant-id').value,
             assigned_plant_sensor_id: document.getElementById('assigned-plant-sensor-id').value,
             assigned_switchbot_id: document.getElementById('assigned-switchbot-id').value,
+            image_url: imageUrlInput.value,
         };
+        const imageSource = document.querySelector('input[name="image-source"]:checked').value;
+        const imageFile = imageUploadInput.files[0];
+
         savePlantBtn.disabled = true;
         savePlantBtn.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Saving...`;
         try {
+            if (imageSource === 'upload' && imageFile) {
+                const formData = new FormData();
+                formData.append('plant-image-upload', imageFile);
+                const uploadResponse = await fetch('/api/plants/upload-image', {
+                    method: 'POST',
+                    body: formData
+                });
+                const uploadResult = await uploadResponse.json();
+                if (!uploadResult.success) {
+                    throw new Error(uploadResult.message || 'Image upload failed.');
+                }
+                plantData.image_url = uploadResult.url;
+            }
+
             const response = await fetch('/api/managed-plants', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -65,10 +95,12 @@ function initializeManagementDashboard() {
             });
             const result = await response.json();
             if (!response.ok || !result.success) { throw new Error('Failed to save plant.'); }
-            loadManagedPlants();
+            
+            await loadManagedPlants(); // リストを更新
             showAlert('success', 'Managed plant saved successfully.', 'main-alert-box');
             editorArea.style.display = 'none';
             placeholder.style.display = 'block';
+
         } catch (error) {
             showAlert('danger', `Error saving plant: ${error.message}`, 'main-alert-box');
         } finally {
@@ -112,7 +144,33 @@ function initializeManagementDashboard() {
         document.getElementById('assigned-plant-sensor-id').value = data.assigned_plant_sensor_id;
         document.getElementById('assigned-switchbot-id').value = data.assigned_switchbot_id;
         document.getElementById('editor-title').textContent = `Editing: ${data.plant_name}`;
+
+        if (data.image_url) {
+            imagePreview.src = data.image_url;
+            imageUrlInput.value = data.image_url;
+            document.getElementById('image-source-url').checked = true;
+        } else {
+            imagePreview.src = 'https://placehold.co/600x300/eee/ccc?text=Plant+Image';
+        }
+        toggleImageSource();
     };
+
+    document.querySelectorAll('input[name="image-source"]').forEach(radio => {
+        radio.addEventListener('change', toggleImageSource);
+    });
+
+    imageUrlInput.addEventListener('input', (e) => {
+        imagePreview.src = e.target.value || 'https://placehold.co/600x300/eee/ccc?text=Plant+Image';
+    });
+
+    imageUploadInput.addEventListener('change', () => {
+        const file = imageUploadInput.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = (e) => { imagePreview.src = e.target.result; };
+            reader.readAsDataURL(file);
+        }
+    });
 
     loadManagedPlants();
 }

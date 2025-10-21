@@ -13,7 +13,6 @@
         </div>
     </div>
 
-    <!-- ▼▼▼ 植物中心のカード表示エリア ▼▼▼ -->
     <h2 class="h3">Managed Plants Status</h2>
     <div id="plant-cards-container" class="row">
         {% for plant_item in plants_data %}
@@ -22,9 +21,10 @@
                 <div id="plant-card-{{ plant_item.managed_plant_id }}" class="card h-100 shadow-sm plant-card">
                     <div class="row g-0 h-100">
                         <div class="col-4">
-                            <img src="{{ plant_item.image_url or 'https://placehold.co/400x600/eeeeee/cccccc?text=No+Image' }}" 
+                            <img src="{{ plant_item.display_image_url or 'https://placehold.co/400x600/eeeeee/cccccc?text=No+Image' }}" 
                                  onerror="this.onerror=null;this.src='https://placehold.co/400x600/eeeeee/cccccc?text=No+Image';"
                                  class="img-fluid rounded-start h-100 w-100" 
+                                 style="object-fit: cover;"
                                  alt="{{ plant_item.plant_name }}">
                         </div>
                         <div class="col-8 d-flex flex-column">
@@ -90,11 +90,8 @@
             </div>
         {% endfor %}
     </div>
-    <!-- ▲▲▲ 植物中心のカード表示エリア ▲▲▲ -->
-
     <hr class="my-4">
 
-    <!-- SwitchBot履歴グラフエリア -->
     <h2 class="h3">Environment History</h2>
     <div class="row">
         {% for switchbot in switchbots_for_chart %}

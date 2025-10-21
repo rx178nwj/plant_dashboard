@@ -1,16 +1,15 @@
 -- SQLite
-UPDATE plants SET monthly_temps_josn  = '{
-    "jan": {"avg": 24, "high": 28, "low": 16},
-    "feb": {"avg": 24, "high": 29, "low": 16},
-    "mar": {"avg": 22, "high": 27, "low": 14},
-    "apr": {"avg": 19, "high": 24, "low": 11},
-    "may": {"avg": 17, "high": 21, "low": 9},
-    "jun": {"avg": 13, "high": 18, "low": 6},
-    "jul": {"avg": 13, "high": 18, "low": 5},
-    "aug": {"avg": 14, "high": 19, "low": 5},
-    "sep": {"avg": 17, "high": 21, "low": 8},
-    "oct": {"avg": 19, "high": 25, "low": 10},
-    "nov": {"avg": 20, "high": 23, "low": 11},
-    "dec": {"avg": 22, "high": 27, "low": 14}
-  }' WHERE id = 15;
-  
+UPDATE plants SET monthly_temps_json  = '{
+"jan": {"avg": 14, "high": 21, "low": 8},
+    "feb": {"avg": 14, "high": 21, "low": 8},
+    "mar": {"avg": 17, "high": 25, "low": 10},
+    "apr": {"avg": 19, "high": 27, "low": 11},
+    "may": {"avg": 19, "high": 27, "low": 11},
+    "jun": {"avg": 20, "high": 27, "low": 13},
+    "jul": {"avg": 18, "high": 22, "low": 13},
+    "aug": {"avg": 17, "high": 22, "low": 13},
+    "sep": {"avg": 18, "high": 22, "low": 13},
+    "oct": {"avg": 16, "high": 21, "low": 11},
+    "nov": {"avg": 15, "high": 21, "low": 10},
+    "dec": {"avg": 15, "high": 21, "low": 9}
+  }' WHERE plant_id = 'plant_c5ab40d4';

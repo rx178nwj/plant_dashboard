@@ -94,22 +94,72 @@ def get_plant_centric_data(selected_date_str):
 @dashboard_bp.route('/')
 @requires_auth
 def dashboard():
-    """メインダッシュボードページ"""
+    """Renders the main dashboard page with data for the selected date."""
     selected_date_str = request.args.get('date', date.today().isoformat())
-    today_str = date.today().isoformat()
+    try:
+        selected_date = date.fromisoformat(selected_date_str)
+    except ValueError:
+        selected_date = date.today()
 
-    plants_data = get_plant_centric_data(selected_date_str)
-
+    is_today = (selected_date == date.today())
+    
     conn = dm.get_db_connection()
-    switchbots = conn.execute("SELECT device_id, device_name FROM devices WHERE device_type LIKE 'switchbot_%'").fetchall()
+
+    # SQLクエリを修正し、COALESCEを使用して表示用URLを決定する
+    plant_list_query = """
+        SELECT
+            mp.managed_plant_id,
+            mp.plant_name,
+            p.genus,
+            p.species,
+            -- managed_plants.image_urlがあればそれを、なければplants.image_urlを使用
+            COALESCE(mp.image_url, p.image_url) as display_image_url
+        FROM
+            managed_plants mp
+        LEFT JOIN
+            plants p ON mp.library_plant_id = p.plant_id
+        ORDER BY
+            mp.plant_name;
+    """
+    
+    plants = conn.execute(plant_list_query).fetchall()
+    
+    plants_data = []
+    for plant in plants:
+        plant_dict = dict(plant)
+        
+        # 最新のセンサーデータを取得
+        sensor_data = conn.execute("""
+            SELECT temperature, humidity, light_lux, soil_moisture
+            FROM sensor_data
+            WHERE device_id = (SELECT assigned_plant_sensor_id FROM managed_plants WHERE managed_plant_id = ?)
+            ORDER BY timestamp DESC
+            LIMIT 1
+        """, (plant_dict['managed_plant_id'],)).fetchone()
+        plant_dict['sensors'] = {'primary': dict(sensor_data) if sensor_data else {}}
+
+        # 最新の分析データを取得
+        analysis = conn.execute("""
+            SELECT growth_period, watering_advice, watering_status
+            FROM daily_plant_analysis
+            WHERE managed_plant_id = ? AND analysis_date <= ?
+            ORDER BY analysis_date DESC
+            LIMIT 1
+        """, (plant_dict['managed_plant_id'], selected_date)).fetchone()
+        plant_dict['analysis'] = dict(analysis) if analysis else {}
+        
+        plants_data.append(plant_dict)
+
+    # グラフ表示用のSwitchBotデバイスを取得
+    switchbots_for_chart = conn.execute("SELECT device_id, device_name FROM devices WHERE device_type LIKE 'switchbot_%'").fetchall()
+
     conn.close()
 
-    return render_template('dashboard.html', 
-                           plants_data=plants_data, 
-                           switchbots_for_chart=switchbots,
-                           active_page='dashboard',
-                           selected_date=selected_date_str,
-                           is_today=(selected_date_str == today_str))
+    return render_template('dashboard.html',
+                           plants_data=plants_data,
+                           switchbots_for_chart=switchbots_for_chart,
+                           selected_date=selected_date.isoformat(),
+                           is_today=is_today)
 
 @dashboard_bp.route('/plant/<managed_plant_id>')
 @requires_auth
