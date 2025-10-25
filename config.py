@@ -7,9 +7,9 @@ import os
 # プロジェクトのベースディレクトリ
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 
-# --- Gemini APIキー ---
-# 環境変数 'GEMINI_API_KEY' から読み込む
-GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY')
+# --- Claude APIキー ---
+# 環境変数 'ANTHROPIC_API_KEY' から読み込む
+ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY')
 
 # --- ログ設定 ---
 LOG_LEVEL = logging.INFO # loggingモジュールの定数を使用
@@ -41,10 +41,9 @@ RECONNECT_ATTEMPTS = 5
 RECONNECT_DELAY_BASE = 2.0  # 秒単位、指数関数的に増加 (2, 4, 8...)
 
 # --- デーモン設定 ---
-# データ取得間隔（秒）。バッテリー消費を考慮し、5分(300秒)を推奨
+# データ取得間隔(秒)。バッテリー消費を考慮し、5分(300秒)を推奨
 DATA_FETCH_INTERVAL = 60
-# 植物の状態分析デーモンの実行間隔（秒）
+# 植物の状態分析デーモンの実行間隔(秒)
 PLANT_ANALYZER_INTERVAL = 3600 # 1時間
 # Webアプリからデーモンへのコマンド連携用パイプ
 COMMAND_PIPE_PATH = "/tmp/plant_dashboard_cmd_pipe.jsonl"
-

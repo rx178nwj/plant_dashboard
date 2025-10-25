@@ -131,65 +131,155 @@ def api_upload_image():
 @plants_bp.route('/api/plants/lookup', methods=['POST'])
 @requires_auth
 def api_plant_lookup():
-    """AIを使用して植物情報を検索します。"""
+    """AIを使用して植物情報を検索します。(Claude API使用)"""
     data = request.json
     plant_name = f"{data.get('genus', '')} {data.get('species', '')} {data.get('variety', '')}".strip()
+    
+    logger.info(f"Plant lookup request for: {plant_name}")
+    
     if not plant_name:
         return jsonify({'success': False, 'message': 'Plant name is required.'}), 400
 
     try:
-        prompt = f"""
-        Search the web to find the most accurate and detailed information for the plant '{plant_name}'.
-        Identify a single, representative native region. Provide monthly climate data for that region.
-        Also, provide distinct temperature ranges for its fast growth, slow growth, hot dormancy, and cold dormancy periods.
-        Provide separate watering instructions for each of these four periods.
-        Also, find a representative, high-quality image of the plant from the web and provide a direct URL to it.
-        I need all information in a structured JSON format. If a value is unknown, use null. All temperatures are in Celsius.
-
-        JSON format: {{
-          "origin_country": "string", "origin_region": "string",
-          "monthly_temps": {{ "jan": {{"avg": integer, "high": integer, "low": integer}}, ...11 more months... }},
-          "growing_fast_temp_high": integer, "growing_fast_temp_low": integer,
-          "growing_slow_temp_high": integer, "growing_slow_temp_low": integer,
-          "hot_dormancy_temp_high": integer, "hot_dormancy_temp_low": integer,
-          "cold_dormancy_temp_high": integer, "cold_dormancy_temp_low": integer,dddddddddddd
-          "lethal_temp_high": integer, "lethal_temp_low": integer,
-          "watering_growing": "string", "watering_slow_growing": "string",
-          "watering_hot_dormancy": "string", "watering_cold_dormancy": "string",
-          "image_url": "string (a direct URL to a representative image)"
-        }}
-        """
-        api_key = current_app.config.get('GEMINI_API_KEY')
-        if not api_key or api_key == 'YOUR_API_KEY_HERE':
-            logger.error("Gemini API key is not configured.")
-            raise ValueError("Gemini API key is not configured")
-
-        api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key={api_key}"
-        payload = {"contents": [{"parts": [{"text": prompt}]}], "generationConfig": {"response_mime_type": "application/json"}}
+        # API keyの確認
+        api_key = current_app.config.get('ANTHROPIC_API_KEY')
+        if not api_key:
+            logger.error("Anthropic API key is not configured.")
+            return jsonify({'success': False, 'message': 'Anthropic API key is not configured. Please set ANTHROPIC_API_KEY in your .env file.'}), 500
         
-        with httpx.Client(timeout=45.0) as client:
-            response = client.post(api_url, json=payload)
-            response.raise_for_status()
+        logger.info(f"API key found: {api_key[:10]}...")
+        
+        prompt = f"""Search the web to find the most accurate and detailed information for the plant '{plant_name}'.
+Identify a single, representative native region. Provide monthly climate data for that region.
+Also, provide distinct temperature ranges for its fast growth, slow growth, hot dormancy, and cold dormancy periods.
+Provide separate watering instructions for each of these four periods.
+Also, find a representative, high-quality image of the plant from the web and provide a direct URL to it.
+
+Please respond with ONLY a valid JSON object in this exact format, with no additional text before or after:
+
+{{
+  "origin_country": "string or null",
+  "origin_region": "string or null",
+  "monthly_temps": {{
+    "jan": {{"avg": 0, "high": 0, "low": 0}},
+    "feb": {{"avg": 0, "high": 0, "low": 0}},
+    "mar": {{"avg": 0, "high": 0, "low": 0}},
+    "apr": {{"avg": 0, "high": 0, "low": 0}},
+    "may": {{"avg": 0, "high": 0, "low": 0}},
+    "jun": {{"avg": 0, "high": 0, "low": 0}},
+    "jul": {{"avg": 0, "high": 0, "low": 0}},
+    "aug": {{"avg": 0, "high": 0, "low": 0}},
+    "sep": {{"avg": 0, "high": 0, "low": 0}},
+    "oct": {{"avg": 0, "high": 0, "low": 0}},
+    "nov": {{"avg": 0, "high": 0, "low": 0}},
+    "dec": {{"avg": 0, "high": 0, "low": 0}}
+  }},
+  "growing_fast_temp_high": 0,
+  "growing_fast_temp_low": 0,
+  "growing_slow_temp_high": 0,
+  "growing_slow_temp_low": 0,
+  "hot_dormancy_temp_high": 0,
+  "hot_dormancy_temp_low": 0,
+  "cold_dormancy_temp_high": 0,
+  "cold_dormancy_temp_low": 0,
+  "lethal_temp_high": 0,
+  "lethal_temp_low": 0,
+  "watering_growing": "string or null",
+  "watering_slow_growing": "string or null",
+  "watering_hot_dormancy": "string or null",
+  "watering_cold_dormancy": "string or null",
+  "image_url": "string or null"
+}}
+
+All temperatures are in Celsius. Use null for unknown values."""
+
+        api_url = "https://api.anthropic.com/v1/messages"
+        headers = {
+            "x-api-key": api_key,
+            "anthropic-version": "2023-06-01",
+            "content-type": "application/json"
+        }
+        
+        payload = {
+            "model": "claude-sonnet-4-20250514",
+            "max_tokens": 4096,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ]
+        }
+        
+        logger.info(f"Sending request to Claude API...")
+        
+        with httpx.Client(timeout=60.0) as client:
+            response = client.post(api_url, headers=headers, json=payload)
+            logger.info(f"Response status: {response.status_code}")
+            
+            if response.status_code != 200:
+                error_text = response.text
+                logger.error(f"API Error Response: {error_text}")
+                response.raise_for_status()
+            
             result = response.json()
+            logger.info(f"API Response received successfully")
 
-        content = result['candidates'][0]['content']['parts'][0]['text']
-        if content.strip().startswith("```json"):
-            content = content.strip()[7:-3]
-        response_data = json.loads(content)
+        # Claudeのレスポンスからテキストを取得
+        if 'content' not in result or not result['content']:
+            logger.error(f"Unexpected API response structure: {result}")
+            return jsonify({'success': False, 'message': 'Unexpected API response structure'}), 500
+            
+        content = result['content'][0]['text']
+        logger.info(f"Raw response content (first 200 chars): {content[:200]}")
+        
+        # JSONブロックの抽出
+        content = content.strip()
+        if content.startswith("```json"):
+            content = content[7:]
+            if content.endswith("```"):
+                content = content[:-3]
+        elif content.startswith("```"):
+            content = content[3:]
+            if content.endswith("```"):
+                content = content[:-3]
+        
+        content = content.strip()
+        logger.info(f"Cleaned content (first 200 chars): {content[:200]}")
+        
+        try:
+            response_data = json.loads(content)
+            logger.info("Successfully parsed JSON response")
+        except json.JSONDecodeError as e:
+            logger.error(f"JSON parse error: {e}")
+            logger.error(f"Content that failed to parse: {content}")
+            return jsonify({'success': False, 'message': f'Failed to parse AI response as JSON: {str(e)}'}), 500
 
+        # 画像URLの処理
         image_url = response_data.get('image_url')
-        if not image_url or image_url == 'null':
+        if not image_url or image_url == 'null' or image_url == '':
             response_data.pop('image_url', None)
+            logger.info("No valid image URL found in response")
 
+        logger.info("Plant lookup completed successfully")
         return jsonify({'success': True, 'data': response_data})
         
     except httpx.HTTPStatusError as e:
-        return jsonify({'success': False, 'message': f'AI service returned an error: {e.response.status_code}'}), 500
-    except (KeyError, IndexError, json.JSONDecodeError):
-        return jsonify({'success': False, 'message': 'Could not parse Gemini API response.'}), 500
+        error_detail = ""
+        try:
+            error_body = e.response.json()
+            error_detail = f": {error_body.get('error', {}).get('message', '')}"
+            logger.error(f"API Error Body: {error_body}")
+        except:
+            error_detail = f": {e.response.text}"
+        logger.error(f"Claude API error: {e.response.status_code}{error_detail}")
+        return jsonify({'success': False, 'message': f'AI service error ({e.response.status_code}){error_detail}'}), 500
+    except httpx.TimeoutException as e:
+        logger.error(f"Request timeout: {e}")
+        return jsonify({'success': False, 'message': 'Request to AI service timed out. Please try again.'}), 500
     except Exception as e:
-        return jsonify({'success': False, 'message': str(e)}), 500
-
+        logger.error(f"Unexpected error in plant lookup: {e}", exc_info=True)
+        return jsonify({'success': False, 'message': f'Unexpected error: {str(e)}'}), 500
 
 @plants_bp.route('/api/plants', methods=['GET', 'POST'])
 @requires_auth
@@ -255,4 +345,3 @@ def delete_plant(plant_id):
         return jsonify({'success': True, 'message': 'Plant deleted successfully.'})
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 500
-
