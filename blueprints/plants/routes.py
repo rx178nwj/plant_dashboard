@@ -11,6 +11,7 @@ from blueprints.dashboard.routes import requires_auth
 
 plants_bp = Blueprint('plants', __name__, template_folder='../../templates')
 logger = logging.getLogger(__name__)
+language = "japanese"
 
 @plants_bp.route('/plants')
 @requires_auth
@@ -149,7 +150,7 @@ def api_plant_lookup():
         
         logger.info(f"API key found: {api_key[:10]}...")
         
-        prompt = f"""Search the web to find the most accurate and detailed information for the plant '{plant_name}'.
+        prompt_type_1 = f"""Search the web to find the most accurate and detailed information for the plant '{plant_name}'.
 Identify a single, representative native region. Provide monthly climate data for that region.
 Also, provide distinct temperature ranges for its fast growth, slow growth, hot dormancy, and cold dormancy periods.
 Provide separate watering instructions for each of these four periods.
@@ -191,7 +192,93 @@ Please respond with ONLY a valid JSON object in this exact format, with no addit
   "image_url": "string or null"
 }}
 
+The user wants comprehensive information about Agave titanota '{plant_name}' including:
+
+    - Native region information
+    - Monthly climate data for that region
+    - Temperature ranges for different growth periods
+    - Watering instructions for each growth period
+    - A high-quality image URL
+    - All formatted as JSON
+
+This is a complex query requiring multiple searches. Let me start by searching for information about
+
 All temperatures are in Celsius. Use null for unknown values."""
+        
+        prompt_type_2 = f"""You are an advanced research agent specializing in botanical data gathering and analysis.
+
+TASK: Conduct comprehensive research on plant '{plant_name}' and return structured data.
+
+RESEARCH PROTOCOL:
+1. ORIGIN ANALYSIS
+   - Search for native habitat and geographic distribution
+   - Identify a single, most representative native region and specify concrete locations such as mountain ranges, mountain areas, and national parks where the species naturally occurs
+   - Verify information across multiple authoritative sources
+
+2. CLIMATE DATA COLLECTION
+   - Obtain monthly temperature data (avg, high, low in Celsius) for the native region
+   - Use meteorological data from the identified region
+   - Cross-reference multiple climate databases
+
+3. GROWTH CYCLE ANALYSIS
+   - Determine optimal temperature ranges for:
+     * Fast growth period
+     * Slow growth period
+     * Hot dormancy period
+     * Cold dormancy period
+   - Identify lethal temperature thresholds (high and low)
+
+4. CARE INSTRUCTIONS
+   - Provide specific watering guidance for each growth phase
+   - Base recommendations on horticultural best practices
+
+5. VISUAL DOCUMENTATION
+   - Locate a high-quality, representative image
+   - Provide direct URL to the image
+
+OUTPUT REQUIREMENTS:
+- Return ONLY valid JSON (no additional text)
+- Use null for unavailable data
+- All temperatures in Celsius
+- Format as specified below
+- The following JSON fields should be written in {language}: origin_country, origin_region, watering_growing, watering_slow_growing, watering_hot_dormancy, watering_cold_dormancy
+
+JSON STRUCTURE:
+{{
+  "origin_country": "string or null",
+  "origin_region": "string or null",
+  "monthly_temps": {{
+    "jan": {{"avg": 0, "high": 0, "low": 0}},
+    "feb": {{"avg": 0, "high": 0, "low": 0}},
+    "mar": {{"avg": 0, "high": 0, "low": 0}},
+    "apr": {{"avg": 0, "high": 0, "low": 0}},
+    "may": {{"avg": 0, "high": 0, "low": 0}},
+    "jun": {{"avg": 0, "high": 0, "low": 0}},
+    "jul": {{"avg": 0, "high": 0, "low": 0}},
+    "aug": {{"avg": 0, "high": 0, "low": 0}},
+    "sep": {{"avg": 0, "high": 0, "low": 0}},
+    "oct": {{"avg": 0, "high": 0, "low": 0}},
+    "nov": {{"avg": 0, "high": 0, "low": 0}},
+    "dec": {{"avg": 0, "high": 0, "low": 0}}
+  }},
+  "growing_fast_temp_high": 0,
+  "growing_fast_temp_low": 0,
+  "growing_slow_temp_high": 0,
+  "growing_slow_temp_low": 0,
+  "hot_dormancy_temp_high": 0,
+  "hot_dormancy_temp_low": 0,
+  "cold_dormancy_temp_high": 0,
+  "cold_dormancy_temp_low": 0,
+  "lethal_temp_high": 0,
+  "lethal_temp_low": 0,
+  "watering_growing": "string or null",
+  "watering_slow_growing": "string or null",
+  "watering_hot_dormancy": "string or null",
+  "watering_cold_dormancy": "string or null",
+  "image_url": "string or null"
+}}
+"""
+        prompt = prompt_type_2
 
         api_url = "https://api.anthropic.com/v1/messages"
         headers = {
@@ -202,8 +289,8 @@ All temperatures are in Celsius. Use null for unknown values."""
         
         payload = {
             "model": "claude-sonnet-4-5-20250929",
-            "max_tokens": 4096,
-            "temperature": 0.1,
+            "max_tokens": 20000,
+            "temperature": 0.5,
             "messages": [
                 {
                     "role": "user",
@@ -214,7 +301,7 @@ All temperatures are in Celsius. Use null for unknown values."""
         
         logger.info(f"Sending request to Claude API...")
         
-        with httpx.Client(timeout=60.0) as client:
+        with httpx.Client(timeout=300.0) as client:
             response = client.post(api_url, headers=headers, json=payload)
             logger.info(f"Response status: {response.status_code}")
             
