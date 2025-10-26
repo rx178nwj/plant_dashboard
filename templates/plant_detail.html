@@ -20,10 +20,10 @@
         <!-- Left Column: Image, Status, and Library Info -->
         <div class="col-lg-5 mb-4">
             <div class="card shadow-sm mb-4">
-                <img src="{{ plant.image_url or 'https://placehold.co/600x400/eeeeee/cccccc?text=No+Image' }}"
-                     class="card-img-top"
-                     onerror="this.onerror=null;this.src='https://placehold.co/600x400/eeeeee/cccccc?text=No+Image';"
-                     alt="{{ plant.plant_name }}">
+                <img src="{{ plant.display_image_url or 'https://placehold.co/600x400/eeeeee/cccccc?text=No+Image' }}"
+                    class="card-img-top"
+                    onerror="this.onerror=null;this.src='https://placehold.co/600x400/eeeeee/cccccc?text=No+Image';"
+                    alt="{{ plant.plant_name }}">
                 <div class="card-body">
                     <h5 class="card-title">Current Status</h5>
                     <div class="row text-center sensor-data-grid py-2">

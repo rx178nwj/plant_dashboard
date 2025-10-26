@@ -167,11 +167,12 @@ def plant_detail(managed_plant_id):
     """個別の植物詳細ページを表示する"""
     conn = dm.get_db_connection()
 
-    # プラントの基本情報を取得 (ライブラリの全情報を取得するよう修正)
+    # プラントの基本情報を取得 (managed_plants.image_urlを優先)
     plant_info_query = """
         SELECT
             mp.managed_plant_id, mp.plant_name, mp.library_plant_id,
             mp.assigned_plant_sensor_id, mp.assigned_switchbot_id,
+            COALESCE(mp.image_url, p.image_url) as display_image_url,
             p.*
         FROM managed_plants mp
         LEFT JOIN plants p ON mp.library_plant_id = p.plant_id
