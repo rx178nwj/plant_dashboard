@@ -1,0 +1,498 @@
+{% extends "layout.html" %}
+
+{% block title %}Device Profiles{% endblock %}
+
+{% block content %}
+<div id="devices-profiles-page">
+    <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+        <h1 class="h2"><i class="bi bi-sliders"></i> Device Profiles</h1>
+    </div>
+
+    <!-- Alert box for messages -->
+    <div id="profiles-alert-box"></div>
+
+    <div class="row">
+        <!-- Plant Sensors Section -->
+        <div class="col-lg-6 mb-4">
+            <div class="card">
+                <div class="card-header bg-success text-white">
+                    <h4 class="mb-0"><i class="bi bi-flower2"></i> Plant Sensors</h4>
+                </div>
+                <div class="card-body">
+                    {% set plant_sensors = registered_devices | selectattr('device_type', 'equalto', 'plant_sensor') | list %}
+                    {% if plant_sensors %}
+                    <div class="list-group">
+                        {% for device in plant_sensors %}
+                        <a href="#" class="list-group-item list-group-item-action device-item" data-device-id="{{ device.device_id }}" data-device-type="plant_sensor">
+                            <div class="d-flex w-100 justify-content-between align-items-start">
+                                <div class="flex-grow-1">
+                                    <div class="d-flex align-items-start mb-2">
+                                        <!-- Plant Image (if assigned) -->
+                                        {% if device.assigned_plant %}
+                                        <img src="{{ device.assigned_plant.display_image_url or 'https://placehold.co/80x120/eeeeee/cccccc?text=No+Image' }}"
+                                             onerror="this.onerror=null;this.src='https://placehold.co/80x120/eeeeee/cccccc?text=No+Image';"
+                                             class="rounded me-2"
+                                             style="width: 50px; height: 75px; object-fit: cover;"
+                                             alt="{{ device.assigned_plant.plant_name }}">
+                                        {% endif %}
+                                        <div class="flex-grow-1">
+                                            <h5 class="mb-1">{{ device.device_name }}</h5>
+                                            <p class="mb-1 text-muted small">
+                                                <i class="bi bi-hdd-network"></i> {{ device.mac_address }}
+                                            </p>
+                                            {% if device.assigned_plant %}
+                                            <div class="mb-1">
+                                                <i class="bi bi-flower2 text-success"></i>
+                                                <strong>{{ device.assigned_plant.plant_name }}</strong>
+                                                <br>
+                                                <small class="text-muted">{{ device.assigned_plant.genus }} {{ device.assigned_plant.species }}</small>
+                                            </div>
+                                            {% else %}
+                                            <p class="text-muted small mb-1"><i class="bi bi-info-circle"></i> No plant assigned</p>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+
+                                    <!-- Sensor Data Display -->
+                                    {% set sensor = device.sensor_data %}
+                                    {% if sensor %}
+                                    <div class="row text-center mt-2 mb-1">
+                                        <div class="col-3">
+                                            <i class="bi bi-thermometer-half text-danger"></i>
+                                            <div class="small fw-bold">
+                                                {{ sensor.temperature | round(1) if sensor.temperature is not none else '--' }} °C
+                                            </div>
+                                        </div>
+                                        <div class="col-3">
+                                            <i class="bi bi-droplet-half text-primary"></i>
+                                            <div class="small fw-bold">
+                                                {{ sensor.humidity | round(1) if sensor.humidity is not none else '--' }} %
+                                            </div>
+                                        </div>
+                                        <div class="col-3">
+                                            <i class="bi bi-brightness-high text-warning"></i>
+                                            <div class="small fw-bold">
+                                                {{ sensor.light_lux | round(1) if sensor.light_lux is not none else '--' }} lx
+                                            </div>
+                                        </div>
+                                        <div class="col-3">
+                                            <i class="bi bi-moisture text-success"></i>
+                                            <div class="small fw-bold">
+                                                {{ sensor.soil_moisture if sensor.soil_moisture is not none else '--' }}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    {% if sensor.timestamp %}
+                                    <small class="text-muted"><i class="bi bi-clock"></i> {{ sensor.timestamp }}</small>
+                                    {% endif %}
+                                    {% else %}
+                                    <p class="text-muted small"><i class="bi bi-info-circle"></i> No sensor data available</p>
+                                    {% endif %}
+                                </div>
+                                <div class="text-end ms-3">
+                                    {% if device.connection_status == 'connected' %}
+                                        <span class="badge bg-success mb-1"><i class="bi bi-check-circle"></i> Connected</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary mb-1"><i class="bi bi-x-circle"></i> Offline</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </a>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <div class="text-center text-muted py-4">
+                        <i class="bi bi-inbox" style="font-size: 3rem;"></i>
+                        <p class="mt-2">No plant sensors registered.</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- SwitchBot Devices Section -->
+        <div class="col-lg-6 mb-4">
+            <div class="card">
+                <div class="card-header bg-info text-white">
+                    <h4 class="mb-0"><i class="bi bi-thermometer-sun"></i> SwitchBot Devices</h4>
+                </div>
+                <div class="card-body">
+                    {% set switchbot_devices = registered_devices | rejectattr('device_type', 'equalto', 'plant_sensor') | list %}
+                    {% if switchbot_devices %}
+                    <div class="list-group">
+                        {% for device in switchbot_devices %}
+                        <a href="#" class="list-group-item list-group-item-action device-item" data-device-id="{{ device.device_id }}" data-device-type="{{ device.device_type }}">
+                            <div class="d-flex w-100 justify-content-between align-items-start">
+                                <div class="flex-grow-1">
+                                    <h5 class="mb-1">{{ device.device_name }}</h5>
+                                    <p class="mb-2 text-muted small">
+                                        <i class="bi bi-hdd-network"></i> {{ device.mac_address }}
+                                    </p>
+                                    <span class="badge bg-secondary mb-2">{{ device.device_type.replace('switchbot_', '').replace('_', ' ').title() }}</span>
+
+                                    <!-- Sensor Data Display -->
+                                    {% set sensor = device.sensor_data %}
+                                    {% if sensor %}
+                                    <div class="row text-center mt-2 mb-1">
+                                        <div class="col-6">
+                                            <i class="bi bi-thermometer-half text-danger"></i>
+                                            <div class="small fw-bold">
+                                                {{ sensor.temperature | round(1) if sensor.temperature is not none else '--' }} °C
+                                            </div>
+                                        </div>
+                                        <div class="col-6">
+                                            <i class="bi bi-droplet-half text-primary"></i>
+                                            <div class="small fw-bold">
+                                                {{ sensor.humidity | round(1) if sensor.humidity is not none else '--' }} %
+                                            </div>
+                                        </div>
+                                    </div>
+                                    {% if sensor.timestamp %}
+                                    <small class="text-muted"><i class="bi bi-clock"></i> {{ sensor.timestamp }}</small>
+                                    {% endif %}
+                                    {% else %}
+                                    <p class="text-muted small"><i class="bi bi-info-circle"></i> No sensor data available</p>
+                                    {% endif %}
+                                </div>
+                                <div class="text-end ms-3">
+                                    {% if device.connection_status == 'connected' %}
+                                        <span class="badge bg-success mb-1"><i class="bi bi-check-circle"></i> Connected</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary mb-1"><i class="bi bi-x-circle"></i> Offline</span>
+                                    {% endif %}
+                                    {% if device.battery_level %}
+                                        <br><span class="badge bg-primary">Battery: {{ device.battery_level }}%</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </a>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <div class="text-center text-muted py-4">
+                        <i class="bi bi-inbox" style="font-size: 3rem;"></i>
+                        <p class="mt-2">No SwitchBot devices registered.</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Device Detail/Edit Modal -->
+<div class="modal fade" id="deviceDetailModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="deviceDetailModalLabel">Device Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="edit-device-form">
+                    <input type="hidden" id="edit-device-id">
+
+                    <div class="row mb-3">
+                        <label class="col-sm-4 col-form-label fw-bold">Device ID:</label>
+                        <div class="col-sm-8">
+                            <p class="form-control-plaintext" id="detail-device-id"></p>
+                        </div>
+                    </div>
+
+                    <div class="row mb-3">
+                        <label for="edit-device-name" class="col-sm-4 col-form-label fw-bold">Device Name:</label>
+                        <div class="col-sm-8">
+                            <input type="text" class="form-control" id="edit-device-name" required>
+                        </div>
+                    </div>
+
+                    <div class="row mb-3">
+                        <label class="col-sm-4 col-form-label fw-bold">MAC Address:</label>
+                        <div class="col-sm-8">
+                            <p class="form-control-plaintext"><code id="detail-mac-address"></code></p>
+                        </div>
+                    </div>
+
+                    <div class="row mb-3">
+                        <label class="col-sm-4 col-form-label fw-bold">Device Type:</label>
+                        <div class="col-sm-8">
+                            <p class="form-control-plaintext" id="detail-device-type"></p>
+                        </div>
+                    </div>
+
+                    <div class="row mb-3" id="detail-assigned-plant-row" style="display: none;">
+                        <label class="col-sm-4 col-form-label fw-bold">Assigned Plant:</label>
+                        <div class="col-sm-8">
+                            <div id="detail-assigned-plant" class="d-flex align-items-center">
+                                <!-- Plant info will be populated by JavaScript -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row mb-3" id="detail-last-seen-row" style="display: none;">
+                        <label class="col-sm-4 col-form-label fw-bold">Last Seen:</label>
+                        <div class="col-sm-8">
+                            <p class="form-control-plaintext" id="detail-last-seen"></p>
+                        </div>
+                    </div>
+
+                    <div class="row mb-3" id="detail-battery-row" style="display: none;">
+                        <label class="col-sm-4 col-form-label fw-bold">Battery Level:</label>
+                        <div class="col-sm-8">
+                            <p class="form-control-plaintext">
+                                <span class="badge bg-primary" id="detail-battery"></span>
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="row mb-3">
+                        <label class="col-sm-4 col-form-label fw-bold">Connection Status:</label>
+                        <div class="col-sm-8">
+                            <p class="form-control-plaintext" id="detail-connection-status"></p>
+                        </div>
+                    </div>
+
+                    <hr>
+                    <h6 class="text-muted mb-3"><i class="bi bi-graph-up"></i> Latest Sensor Data</h6>
+
+                    <div id="detail-sensor-data-section">
+                        <!-- Sensor data will be populated by JavaScript -->
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" id="save-device-button">
+                    <i class="bi bi-save"></i> Save Changes
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const deviceItems = document.querySelectorAll('.device-item');
+    const deviceDetailModal = new bootstrap.Modal(document.getElementById('deviceDetailModal'));
+    const alertBox = document.getElementById('profiles-alert-box');
+    const saveButton = document.getElementById('save-device-button');
+
+    // Store all devices data for quick access
+    const devicesData = {
+        {% for device in registered_devices %}
+        '{{ device.device_id }}': {
+            device_id: '{{ device.device_id }}',
+            device_name: '{{ device.device_name }}',
+            mac_address: '{{ device.mac_address }}',
+            device_type: '{{ device.device_type }}',
+            last_seen: '{{ device.last_seen or "" }}',
+            battery_level: '{{ device.battery_level or "" }}',
+            connection_status: '{{ device.connection_status }}',
+            sensor_data: {
+                temperature: {{ device.sensor_data.temperature | default('null') }},
+                humidity: {{ device.sensor_data.humidity | default('null') }},
+                light_lux: {{ device.sensor_data.light_lux | default('null') }},
+                soil_moisture: {{ device.sensor_data.soil_moisture | default('null') }},
+                timestamp: '{{ device.sensor_data.timestamp or "" }}'
+            },
+            {% if device.assigned_plant %}
+            assigned_plant: {
+                managed_plant_id: '{{ device.assigned_plant.managed_plant_id }}',
+                plant_name: '{{ device.assigned_plant.plant_name }}',
+                genus: '{{ device.assigned_plant.genus or "" }}',
+                species: '{{ device.assigned_plant.species or "" }}',
+                display_image_url: '{{ device.assigned_plant.display_image_url or "" }}'
+            }
+            {% else %}
+            assigned_plant: null
+            {% endif %}
+        },
+        {% endfor %}
+    };
+
+    // Open modal with device details
+    deviceItems.forEach(item => {
+        item.addEventListener('click', function(e) {
+            e.preventDefault();
+            const deviceId = this.dataset.deviceId;
+            const device = devicesData[deviceId];
+
+            if (device) {
+                // Populate modal with device data
+                document.getElementById('edit-device-id').value = device.device_id;
+                document.getElementById('detail-device-id').textContent = device.device_id;
+                document.getElementById('edit-device-name').value = device.device_name;
+                document.getElementById('detail-mac-address').textContent = device.mac_address;
+
+                // Device type badge
+                let typeHtml = '';
+                if (device.device_type === 'plant_sensor') {
+                    typeHtml = '<span class="badge bg-success"><i class="bi bi-flower2"></i> Plant Sensor</span>';
+                } else {
+                    const typeName = device.device_type.replace('switchbot_', '').replace(/_/g, ' ');
+                    typeHtml = `<span class="badge bg-info"><i class="bi bi-thermometer-sun"></i> ${typeName.charAt(0).toUpperCase() + typeName.slice(1)}</span>`;
+                }
+                document.getElementById('detail-device-type').innerHTML = typeHtml;
+
+                // Assigned plant (for plant sensors)
+                if (device.assigned_plant) {
+                    const plantHtml = `
+                        <img src="${device.assigned_plant.display_image_url || 'https://placehold.co/80x120/eeeeee/cccccc?text=No+Image'}"
+                             onerror="this.onerror=null;this.src='https://placehold.co/80x120/eeeeee/cccccc?text=No+Image';"
+                             class="rounded me-2"
+                             style="width: 60px; height: 90px; object-fit: cover;"
+                             alt="${device.assigned_plant.plant_name}">
+                        <div>
+                            <strong>${device.assigned_plant.plant_name}</strong><br>
+                            <small class="text-muted">${device.assigned_plant.genus} ${device.assigned_plant.species}</small>
+                        </div>
+                    `;
+                    document.getElementById('detail-assigned-plant').innerHTML = plantHtml;
+                    document.getElementById('detail-assigned-plant-row').style.display = 'flex';
+                } else {
+                    document.getElementById('detail-assigned-plant-row').style.display = 'none';
+                }
+
+                // Last seen
+                if (device.last_seen) {
+                    document.getElementById('detail-last-seen').textContent = device.last_seen;
+                    document.getElementById('detail-last-seen-row').style.display = 'flex';
+                } else {
+                    document.getElementById('detail-last-seen-row').style.display = 'none';
+                }
+
+                // Battery level
+                if (device.battery_level) {
+                    document.getElementById('detail-battery').textContent = device.battery_level + '%';
+                    document.getElementById('detail-battery-row').style.display = 'flex';
+                } else {
+                    document.getElementById('detail-battery-row').style.display = 'none';
+                }
+
+                // Connection status
+                const statusHtml = device.connection_status === 'connected'
+                    ? '<span class="badge bg-success"><i class="bi bi-check-circle"></i> Connected</span>'
+                    : '<span class="badge bg-secondary"><i class="bi bi-x-circle"></i> Disconnected</span>';
+                document.getElementById('detail-connection-status').innerHTML = statusHtml;
+
+                // Sensor data
+                const sensorDataSection = document.getElementById('detail-sensor-data-section');
+                if (device.sensor_data && (device.sensor_data.temperature !== null || device.sensor_data.humidity !== null)) {
+                    let sensorHtml = '<div class="row text-center">';
+
+                    // Temperature
+                    if (device.sensor_data.temperature !== null) {
+                        sensorHtml += `
+                            <div class="col-6 mb-3">
+                                <i class="bi bi-thermometer-half text-danger" style="font-size: 1.5rem;"></i>
+                                <div class="fw-bold fs-5">${device.sensor_data.temperature.toFixed(1)} °C</div>
+                                <div class="text-muted small">Temperature</div>
+                            </div>
+                        `;
+                    }
+
+                    // Humidity
+                    if (device.sensor_data.humidity !== null) {
+                        sensorHtml += `
+                            <div class="col-6 mb-3">
+                                <i class="bi bi-droplet-half text-primary" style="font-size: 1.5rem;"></i>
+                                <div class="fw-bold fs-5">${device.sensor_data.humidity.toFixed(1)} %</div>
+                                <div class="text-muted small">Humidity</div>
+                            </div>
+                        `;
+                    }
+
+                    // Light (Plant sensors only)
+                    if (device.sensor_data.light_lux !== null) {
+                        sensorHtml += `
+                            <div class="col-6 mb-3">
+                                <i class="bi bi-brightness-high text-warning" style="font-size: 1.5rem;"></i>
+                                <div class="fw-bold fs-5">${device.sensor_data.light_lux.toFixed(1)} lx</div>
+                                <div class="text-muted small">Light</div>
+                            </div>
+                        `;
+                    }
+
+                    // Soil Moisture (Plant sensors only)
+                    if (device.sensor_data.soil_moisture !== null) {
+                        sensorHtml += `
+                            <div class="col-6 mb-3">
+                                <i class="bi bi-moisture text-success" style="font-size: 1.5rem;"></i>
+                                <div class="fw-bold fs-5">${device.sensor_data.soil_moisture}</div>
+                                <div class="text-muted small">Soil Moisture</div>
+                            </div>
+                        `;
+                    }
+
+                    sensorHtml += '</div>';
+
+                    if (device.sensor_data.timestamp) {
+                        sensorHtml += `<p class="text-muted small mt-2"><i class="bi bi-clock"></i> Last updated: ${device.sensor_data.timestamp}</p>`;
+                    }
+
+                    sensorDataSection.innerHTML = sensorHtml;
+                } else {
+                    sensorDataSection.innerHTML = '<p class="text-muted"><i class="bi bi-info-circle"></i> No sensor data available</p>';
+                }
+
+                deviceDetailModal.show();
+            }
+        });
+    });
+
+    // Save device changes
+    saveButton.addEventListener('click', async function() {
+        const deviceId = document.getElementById('edit-device-id').value;
+        const deviceName = document.getElementById('edit-device-name').value;
+
+        if (!deviceName.trim()) {
+            alert('Device name cannot be empty');
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/device/${deviceId}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ device_name: deviceName })
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                alertBox.innerHTML = `
+                    <div class="alert alert-success alert-dismissible fade show" role="alert">
+                        <i class="bi bi-check-circle"></i> ${data.message}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                `;
+                deviceDetailModal.hide();
+                // Reload page to show updated data
+                setTimeout(() => location.reload(), 1000);
+            } else {
+                alertBox.innerHTML = `
+                    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                        <i class="bi bi-exclamation-triangle"></i> ${data.message}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                `;
+            }
+
+            window.scrollTo(0, 0);
+        } catch (error) {
+            alertBox.innerHTML = `
+                <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                    <i class="bi bi-exclamation-triangle"></i> Failed to update device: ${error.message}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            `;
+            window.scrollTo(0, 0);
+        }
+    });
+});
+</script>
+{% endblock %}

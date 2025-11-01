@@ -1,4 +1,8 @@
+# Logs
 logs/
+*.log
+
+# OS Files
 .DS_Store
 .DS_Store?
 ._*
@@ -6,17 +10,39 @@ logs/
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# Environment
 .env
+.venv/
+venv/
+
+# IDE
 .idea/
 .vscode/
-.venv/
+
+# Python
 __pycache__/
-*.db__pycache__/
 *.pyc
-*/*.pyc
 *.pyo
 *.pyd
-*.log
-static/uploads/
-__pycache__/
+*.py[cod]
+*$py.class
+
+# Database files
 data/plant_monitor.db
+data/*.db
+*.db
+
+# Uploads
+static/uploads/
+
+# Node modules
+node_modules/
+package-lock.json
+
+# Temporary files
+/tmp/
+*.tmp
+*.bak
+*.swp
+*~
