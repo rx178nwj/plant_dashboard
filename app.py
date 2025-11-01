@@ -49,10 +49,10 @@ def create_app():
     def inject_nav():
         return dict(nav_items=[
             {'url': 'dashboard.dashboard', 'icon': 'bi-grid-fill', 'text': 'Dashboard'},
+            {'url': 'devices.devices_profiles', 'icon': 'bi-sliders', 'text': 'Device Profiles'},
             {'url': 'management.management', 'icon': 'bi-sliders', 'text': 'Management'},
             {'url': 'management.watering_profiles', 'icon': 'bi-droplet-half', 'text': 'Watering Profiles'},
             {'url': 'devices.devices', 'icon': 'bi-hdd-stack-fill', 'text': 'Devices'},
-            {'url': 'devices.devices_profiles', 'icon': 'bi-sliders', 'text': 'Device Profiles'},
             {'url': 'plants.plants', 'icon': 'bi-book-half', 'text': 'Plant Library'}
         ])
 
