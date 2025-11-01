@@ -69,6 +69,54 @@ def devices_profiles():
     return render_template('devices_profiles.html', registered_devices=devices_with_data)
 
 
+@devices_bp.route('/devices/profile/<device_id>')
+@requires_auth
+def device_profile_detail(device_id):
+    """デバイス詳細ページを表示します。"""
+    conn = dm.get_db_connection()
+
+    # デバイス情報を取得
+    device = conn.execute('SELECT * FROM devices WHERE device_id = ?', (device_id,)).fetchone()
+
+    if not device:
+        conn.close()
+        return "Device not found", 404
+
+    device_dict = dict(device)
+
+    # 最新のセンサーデータを取得
+    sensor_data = conn.execute("""
+        SELECT temperature, humidity, light_lux, soil_moisture, timestamp
+        FROM sensor_data
+        WHERE device_id = ?
+        ORDER BY timestamp DESC
+        LIMIT 1
+    """, (device_id,)).fetchone()
+
+    device_dict['sensor_data'] = dict(sensor_data) if sensor_data else {}
+
+    # plant sensorの場合、関連する植物情報を取得
+    if device['device_type'] == 'plant_sensor':
+        plant_info = conn.execute("""
+            SELECT
+                mp.managed_plant_id,
+                mp.plant_name,
+                p.genus,
+                p.species,
+                COALESCE(mp.image_url, p.image_url) as display_image_url
+            FROM managed_plants mp
+            LEFT JOIN plants p ON mp.library_plant_id = p.plant_id
+            WHERE mp.assigned_plant_sensor_id = ?
+        """, (device_id,)).fetchone()
+
+        device_dict['assigned_plant'] = dict(plant_info) if plant_info else None
+    else:
+        device_dict['assigned_plant'] = None
+
+    conn.close()
+    return render_template('device_detail.html', device=device_dict)
+
+
 @devices_bp.route('/api/ble-scan', methods=['POST'])
 @requires_auth
 def api_ble_scan():

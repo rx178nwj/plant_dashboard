@@ -3,7 +3,7 @@
 {% block title %}{{ plant.plant_name }} - Details{% endblock %}
 
 {% block content %}
-<div id="plant-detail-page" data-plant-id="{{ plant.managed_plant_id }}" data-selected-date="{{ plant.sensors.primary.timestamp.split(' ')[0] if plant.sensors.primary and plant.sensors.primary.timestamp else '' }}">
+<div id="plant-detail-page" data-plant-id="{{ plant.managed_plant_id }}" data-selected-date="{{ today_date }}">
 
     <!-- Page Header -->
     <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">

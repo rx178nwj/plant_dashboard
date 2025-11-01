@@ -184,7 +184,8 @@ def plant_detail(managed_plant_id):
         conn.close()
         abort(404, description="Plant not found")
         
-    plant_data = get_plant_centric_data(date.today().isoformat())
+    today_str = date.today().isoformat()
+    plant_data = get_plant_centric_data(today_str)
     
     # このままだと全プラントのデータを取ってしまうので、特定のプラントだけをフィルタリング
     plant = next((p for p in plant_data if p['managed_plant_id'] == managed_plant_id), None)
@@ -207,7 +208,8 @@ def plant_detail(managed_plant_id):
     return render_template('plant_detail.html', 
                            plant=plant, 
                            daily_history=daily_history,
-                           active_page='dashboard')
+                           active_page='dashboard',
+                           today_date=today_str)
 
 
 @dashboard_bp.route('/api/history/<device_id>')

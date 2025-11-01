@@ -77,79 +77,86 @@ function renderMonthlyClimateChart(canvas) {
 
 
 /**
- * 詳細ページのすべてのグラフ（日別集計とセンサー）を初期化します。
+ * Initializes all charts on the detail pages (plant and device).
  */
 function initializeDetailCharts() {
-    const pageContainer = document.getElementById('plant-detail-page');
+    const pageContainer = document.getElementById('plant-detail-page') || document.getElementById('device-detail-page');
     if (!pageContainer) return;
 
-    const managedPlantId = pageContainer.dataset.plantId;
-    const analysisChartInstances = {};
+    const isPlantDetailPage = (pageContainer.id === 'plant-detail-page');
     const sensorChartInstances = {};
-    const initialDate = pageContainer.dataset.selectedDate || new Date().toISOString().split('T')[0];
+    
+    let initialDate = new Date().toISOString().split('T')[0];
+    if (isPlantDetailPage && pageContainer.dataset.selectedDate) {
+        initialDate = pageContainer.dataset.selectedDate;
+    }
 
-    // --- 1. 日別集計グラフの初期化 ---
-    const analysisChartCanvas = document.getElementById(`analysis-history-chart-${managedPlantId}`);
-    if (analysisChartCanvas) {
-        const analysisDatePicker = document.getElementById(`analysis-date-picker-${managedPlantId}`);
-        if (analysisDatePicker) {
-            analysisDatePicker.value = initialDate;
-        }
+    // --- Analysis Chart (Plant Detail Page Only) ---
+    if (isPlantDetailPage) {
+        const managedPlantId = pageContainer.dataset.plantId;
+        const analysisChartInstances = {};
+        const analysisChartCanvas = document.getElementById(`analysis-history-chart-${managedPlantId}`);
+        if (analysisChartCanvas) {
+            const analysisDatePicker = document.getElementById(`analysis-date-picker-${managedPlantId}`);
+            if (analysisDatePicker) {
+                analysisDatePicker.value = initialDate;
+            }
 
-        const updateChartFromAnalysisControls = () => {
-            const selectedPeriodButton = pageContainer.querySelector(`.analysis-period-btn[data-plant-id="${managedPlantId}"].active`);
-            if (!selectedPeriodButton) return;
-            const selectedPeriod = selectedPeriodButton.dataset.period;
-            const selectedDate = analysisDatePicker ? analysisDatePicker.value : initialDate;
-            updateAnalysisHistoryChart(managedPlantId, selectedPeriod, analysisChartInstances, selectedDate);
-        };
-        
-        updateAnalysisHistoryChart(managedPlantId, '7d', analysisChartInstances, initialDate);
+            const updateChartFromAnalysisControls = () => {
+                const selectedPeriodButton = pageContainer.querySelector(`.analysis-period-btn[data-plant-id="${managedPlantId}"].active`);
+                if (!selectedPeriodButton) return;
+                const selectedPeriod = selectedPeriodButton.dataset.period;
+                const selectedDate = analysisDatePicker ? analysisDatePicker.value : initialDate;
+                updateAnalysisHistoryChart(managedPlantId, selectedPeriod, analysisChartInstances, selectedDate);
+            };
+            
+            updateAnalysisHistoryChart(managedPlantId, '7d', analysisChartInstances, initialDate);
 
-        pageContainer.querySelectorAll('.analysis-period-btn').forEach(button => {
-            button.addEventListener('click', (e) => {
-                const { plantId } = e.target.dataset;
-                pageContainer.querySelectorAll(`.analysis-period-btn[data-plant-id="${plantId}"]`).forEach(btn => btn.classList.remove('active'));
-                e.target.classList.add('active');
-                updateChartFromAnalysisControls();
+            pageContainer.querySelectorAll('.analysis-period-btn').forEach(button => {
+                button.addEventListener('click', (e) => {
+                    const { plantId } = e.target.dataset;
+                    pageContainer.querySelectorAll(`.analysis-period-btn[data-plant-id="${plantId}"]`).forEach(btn => btn.classList.remove('active'));
+                    e.target.classList.add('active');
+                    updateChartFromAnalysisControls();
+                });
             });
-        });
 
-        if (analysisDatePicker) {
-            analysisDatePicker.addEventListener('change', updateChartFromAnalysisControls);
-        }
-        
-        const analysisOptionsContainer = document.getElementById(`analysis-chart-options-${managedPlantId}`);
-        if (analysisOptionsContainer) {
-            analysisOptionsContainer.addEventListener('change', (e) => {
-                if (e.target.matches('input[type="checkbox"]')) {
-                    const chart = analysisChartInstances[managedPlantId];
-                    if (chart) {
-                        const labelToToggle = e.target.dataset.datasetLabel;
-                        
-                        let datasetsToToggle = {
-                            'Temp Range': ['Daily Temp Max', 'Daily Temp Min', 'Daily Temp Avg'],
-                            'Humidity Range': ['Daily Humidity Max', 'Daily Humidity Min', 'Avg Humidity (%)'],
-                            'Light Range': ['Daily Light Max', 'Daily Light Min', 'Avg Light (lux)'],
-                            'Fast Growth Range': ['Fast Growth Range Lower', 'Fast Growth Range Upper'],
-                            'Slow Growth Range': ['Slow Growth Range Lower', 'Slow Growth Range Upper'],
-                            'Hot Dormancy Range': ['Hot Dormancy Range Lower', 'Hot Dormancy Range Upper'],
-                            'Cold Dormancy Range': ['Cold Dormancy Range Lower', 'Cold Dormancy Range Upper'],
-                        }[labelToToggle] || [];
+            if (analysisDatePicker) {
+                analysisDatePicker.addEventListener('change', updateChartFromAnalysisControls);
+            }
+            
+            const analysisOptionsContainer = document.getElementById(`analysis-chart-options-${managedPlantId}`);
+            if (analysisOptionsContainer) {
+                analysisOptionsContainer.addEventListener('change', (e) => {
+                    if (e.target.matches('input[type="checkbox"]')) {
+                        const chart = analysisChartInstances[managedPlantId];
+                        if (chart) {
+                            const labelToToggle = e.target.dataset.datasetLabel;
+                            
+                            let datasetsToToggle = {
+                                'Temp Range': ['Daily Temp Max', 'Daily Temp Min', 'Daily Temp Avg'],
+                                'Humidity Range': ['Daily Humidity Max', 'Daily Humidity Min', 'Avg Humidity (%)'],
+                                'Light Range': ['Daily Light Max', 'Daily Light Min', 'Avg Light (lux)'],
+                                'Fast Growth Range': ['Fast Growth Range Lower', 'Fast Growth Range Upper'],
+                                'Slow Growth Range': ['Slow Growth Range Lower', 'Slow Growth Range Upper'],
+                                'Hot Dormancy Range': ['Hot Dormancy Range Lower', 'Hot Dormancy Range Upper'],
+                                'Cold Dormancy Range': ['Cold Dormancy Range Lower', 'Cold Dormancy Range Upper'],
+                            }[labelToToggle] || [];
 
-                        chart.data.datasets.forEach(dataset => {
-                            if (datasetsToToggle.includes(dataset.label)) {
-                                dataset.hidden = !e.target.checked;
-                            }
-                        });
-                        chart.update();
+                            chart.data.datasets.forEach(dataset => {
+                                if (datasetsToToggle.includes(dataset.label)) {
+                                    dataset.hidden = !e.target.checked;
+                                }
+                            });
+                            chart.update();
+                        }
                     }
-                }
-            });
+                });
+            }
         }
     }
 
-    // --- 2. センサー履歴グラフの初期化 ---
+    // --- Sensor History Chart (Both Pages) ---
     const sensorChartCanvas = pageContainer.querySelector('canvas[id^="history-chart-"]');
     if (sensorChartCanvas) {
         const deviceId = sensorChartCanvas.id.replace('history-chart-', '');
@@ -165,7 +172,7 @@ function initializeDetailCharts() {
             const selectedPeriodButton = pageContainer.querySelector(`.period-btn[data-device-id="${deviceId}"].active`);
             if (!selectedPeriodButton) return;
             const selectedPeriod = selectedPeriodButton.dataset.period;
-            const selectedDate = datePicker ? datePicker.value : initialDate;
+            const selectedDate = datePicker ? datePicker.value : new Date().toISOString().split('T')[0];
             updateSensorHistoryChart(deviceId, selectedPeriod, sensorChartInstances, selectedDate);
         };
     
@@ -182,14 +189,18 @@ function initializeDetailCharts() {
         }
     }
 
-    // --- 3. Native Climate Chart Initialization ---
-    const climateChartCanvas = document.getElementById('monthly-climate-chart');
-    renderMonthlyClimateChart(climateChartCanvas);
+    // --- Native Climate Chart (Plant Detail Page Only) ---
+    if (isPlantDetailPage) {
+        const climateChartCanvas = document.getElementById('monthly-climate-chart');
+        renderMonthlyClimateChart(climateChartCanvas);
+    }
 }
+
+document.addEventListener('DOMContentLoaded', initializeDetailCharts);
 
 
 /**
- * 日別集計データ（`daily_plant_analysis`）をグラフに描画します。
+ * Renders the daily aggregate data chart (`daily_plant_analysis`).
  */
 async function updateAnalysisHistoryChart(managedPlantId, period, chartInstances, selectedDate) {
     const canvas = document.getElementById(`analysis-history-chart-${managedPlantId}`);
@@ -382,8 +393,7 @@ async function updateAnalysisHistoryChart(managedPlantId, period, chartInstances
 
 
 /**
- * センサーの生履歴データ（`sensor_data`）をグラフに描画します。
- * この関数は詳細ページでのみ使用されます。
+ * Renders the raw sensor history chart (`sensor_data`).
  */
 async function updateSensorHistoryChart(deviceId, period, chartInstances, selectedDate) {
     const canvas = document.getElementById(`history-chart-${deviceId}`);
@@ -507,12 +517,16 @@ async function updateSensorHistoryChart(deviceId, period, chartInstances, select
                 { label: 'Humidity (%)', data: historyData.map(d => d.humidity), borderColor: 'rgba(13, 110, 253, 0.8)', yAxisID: 'y_humid', tension: 0.2, pointRadius: 0 }
             );
 
-            if (historyData.some(d => d.light_lux !== null || d.soil_moisture !== null)) {
+            if (historyData.some(d => d.light_lux !== null)) {
                 datasets.push(
-                    { label: 'Light (lux)', data: historyData.map(d => d.light_lux), borderColor: 'rgba(255, 206, 86, 0.8)', yAxisID: 'y_light', tension: 0.2, pointRadius: 0 },
-                    { label: 'Soil Moisture', data: historyData.map(d => d.soil_moisture), borderColor: 'rgba(139, 69, 19, 0.8)', yAxisID: 'y_soil', tension: 0.2, pointRadius: 0 }
+                    { label: 'Light (lux)', data: historyData.map(d => d.light_lux), borderColor: 'rgba(255, 206, 86, 0.8)', yAxisID: 'y_light', tension: 0.2, pointRadius: 0 }
                 );
                 scales.y_light = { position: 'right', title: { display: true, text: 'Light (lux)' }, grid: { drawOnChartArea: false }};
+            }
+            if (historyData.some(d => d.soil_moisture !== null)) {
+                datasets.push(
+                    { label: 'Soil Moisture', data: historyData.map(d => d.soil_moisture), borderColor: 'rgba(139, 69, 19, 0.8)', yAxisID: 'y_soil', tension: 0.2, pointRadius: 0 }
+                );
                 scales.y_soil = { position: 'right', title: { display: true, text: 'Soil Moisture' }, grid: { drawOnChartArea: false } };
             }
         }
