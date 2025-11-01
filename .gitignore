@@ -16,6 +16,7 @@ __pycache__/
 */*.pyc
 *.pyo
 *.pyd
+*.log
 static/uploads/
 __pycache__/
 data/plant_monitor.db
