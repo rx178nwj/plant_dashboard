@@ -175,8 +175,12 @@ def api_add_device():
     data = request.json
     try:
         conn = dm.get_db_connection()
-        # MACアドレスの末尾6桁を使用してユニークなIDを生成
-        device_id = f"dev_{data['mac_address'].replace(':', '')[-6:].lower()}"
+        # device_typeを先頭に使用してユニークなIDを生成
+        # MACアドレスの末尾6桁を追加
+        device_type = data['device_type']
+        mac_suffix = data['mac_address'].replace(':', '')[-6:].lower()
+        device_id = f"{device_type}_{mac_suffix}"
+
         conn.execute(
             "INSERT INTO devices (device_id, device_name, mac_address, device_type) VALUES (?, ?, ?, ?)",
             (device_id, data['device_name'], data['mac_address'], data['device_type'])
