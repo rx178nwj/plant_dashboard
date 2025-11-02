@@ -4,6 +4,9 @@
 
 {% block content %}
 <div id="devices-page">
+    <!-- Alert box for this page -->
+    <div id="devices-alert-box"></div>
+
     <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
         <h1 class="h2">Device Management</h1>
     </div>
@@ -26,7 +29,13 @@
                             <tr>
                                 <td>{{ device.device_name }}</td>
                                 <td>{{ device.mac_address }}</td>
-                                <td><button class="btn btn-sm btn-outline-danger" disabled>Delete</button></td>
+                                <td>
+                                    <button class="btn btn-sm btn-outline-danger delete-device-btn"
+                                            data-device-id="{{ device.device_id }}"
+                                            data-device-name="{{ device.device_name }}">
+                                        <i class="bi bi-trash"></i> Delete
+                                    </button>
+                                </td>
                             </tr>
                             {% else %}
                             <tr><td colspan="3" class="text-center text-muted">No plant sensors registered.</td></tr>
@@ -55,7 +64,13 @@
                                 <td>{{ device.device_name }}</td>
                                 <td>{{ device.mac_address }}</td>
                                 <td><span class="badge bg-secondary">{{ device.device_type.replace('switchbot_', '') }}</span></td>
-                                <td><button class="btn btn-sm btn-outline-danger" disabled>Delete</button></td>
+                                <td>
+                                    <button class="btn btn-sm btn-outline-danger delete-device-btn"
+                                            data-device-id="{{ device.device_id }}"
+                                            data-device-name="{{ device.device_name }}">
+                                        <i class="bi bi-trash"></i> Delete
+                                    </button>
+                                </td>
                             </tr>
                             {% else %}
                             <tr><td colspan="4" class="text-center text-muted">No SwitchBot devices registered.</td></tr>
@@ -124,6 +139,100 @@
         </div>
       </div>
     </div>
+
+    <!-- Delete Confirmation Modal -->
+    <div class="modal fade" id="deleteDeviceModal" tabindex="-1" aria-labelledby="deleteDeviceModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title" id="deleteDeviceModalLabel">
+                        <i class="bi bi-exclamation-triangle-fill"></i> デバイスの削除確認
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-2">以下のデバイスを本当に削除しますか？</p>
+                    <div class="alert alert-warning">
+                        <strong>デバイス名:</strong> <span id="delete-device-name"></span><br>
+                        <strong>デバイスID:</strong> <code id="delete-device-id"></code>
+                    </div>
+                    <p class="text-danger mb-0">
+                        <i class="bi bi-info-circle-fill"></i>
+                        この操作は元に戻せません。デバイスに関連するすべてのセンサーデータも削除されます。
+                    </p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+                    <button type="button" class="btn btn-danger" id="confirm-delete-btn">
+                        <i class="bi bi-trash"></i> 削除する
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 {% endblock %}
 
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const deleteModal = new bootstrap.Modal(document.getElementById('deleteDeviceModal'));
+    const confirmDeleteBtn = document.getElementById('confirm-delete-btn');
+    const deleteDeviceNameSpan = document.getElementById('delete-device-name');
+    const deleteDeviceIdSpan = document.getElementById('delete-device-id');
+    let currentDeviceId = null;
+
+    // 全ての削除ボタンにイベントリスナーを追加
+    document.querySelectorAll('.delete-device-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            currentDeviceId = this.dataset.deviceId;
+            const deviceName = this.dataset.deviceName;
+
+            // モーダルに情報を表示
+            deleteDeviceNameSpan.textContent = deviceName;
+            deleteDeviceIdSpan.textContent = currentDeviceId;
+
+            // モーダルを表示
+            deleteModal.show();
+        });
+    });
+
+    // 確認ボタンクリック - デバイスを削除
+    confirmDeleteBtn.addEventListener('click', async function() {
+        if (!currentDeviceId) return;
+
+        confirmDeleteBtn.disabled = true;
+        confirmDeleteBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 削除中...';
+
+        try {
+            const response = await fetch(`/api/device/${currentDeviceId}`, {
+                method: 'DELETE',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            const result = await response.json();
+
+            if (response.ok && result.success) {
+                // 成功メッセージを表示
+                deleteModal.hide();
+                showAlert('success', result.message, 'devices-alert-box');
+
+                // 1秒後にページをリロード
+                setTimeout(function() {
+                    window.location.reload();
+                }, 1000);
+            } else {
+                throw new Error(result.message || 'デバイスの削除に失敗しました。');
+            }
+        } catch (error) {
+            deleteModal.hide();
+            showAlert('danger', `エラー: ${error.message}`, 'devices-alert-box');
+            confirmDeleteBtn.disabled = false;
+            confirmDeleteBtn.innerHTML = '<i class="bi bi-trash"></i> 削除する';
+        }
+    });
+});
+</script>
+{% endblock %}
