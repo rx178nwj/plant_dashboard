@@ -257,3 +257,49 @@ def api_write_watering_profile(sensor_id):
         response_data = json.dumps({'success': False, 'message': f'サーバー内部でエラーが発生しました: {e}'})
         return Response(response_data, status=500, mimetype='application/json')
 
+
+@devices_bp.route('/api/device/<device_id>', methods=['DELETE'])
+@requires_auth
+def api_delete_device(device_id):
+    """デバイスを削除します。"""
+    try:
+        conn = dm.get_db_connection()
+
+        # デバイスが存在するか確認
+        device = conn.execute('SELECT * FROM devices WHERE device_id = ?', (device_id,)).fetchone()
+        if not device:
+            conn.close()
+            return jsonify({'success': False, 'message': 'デバイスが見つかりません。'}), 404
+
+        # managed_plantsテーブルでこのデバイスを参照しているレコードをNULLに更新
+        conn.execute('''
+            UPDATE managed_plants
+            SET assigned_plant_sensor_id = NULL
+            WHERE assigned_plant_sensor_id = ?
+        ''', (device_id,))
+
+        conn.execute('''
+            UPDATE managed_plants
+            SET assigned_switchbot_id = NULL
+            WHERE assigned_switchbot_id = ?
+        ''', (device_id,))
+
+        # センサーデータを削除
+        conn.execute('DELETE FROM sensor_data WHERE device_id = ?', (device_id,))
+
+        # デバイスを削除
+        conn.execute('DELETE FROM devices WHERE device_id = ?', (device_id,))
+
+        conn.commit()
+        conn.close()
+
+        # メモリ上のデバイスリストを再読み込み
+        dm.load_devices_from_db()
+
+        logger.info(f"デバイス {device_id} を削除しました。")
+        return jsonify({'success': True, 'message': 'デバイスを削除しました。'})
+
+    except Exception as e:
+        logger.error(f"デバイスの削除に失敗しました: {e}", exc_info=True)
+        return jsonify({'success': False, 'message': f'デバイスの削除に失敗しました: {e}'}), 500
+

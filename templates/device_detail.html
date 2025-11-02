@@ -241,7 +241,7 @@
                             <i class="bi bi-droplet"></i> Configure Thresholds
                         </a>
                         {% endif %}
-                        <button class="btn btn-outline-danger" disabled>
+                        <button class="btn btn-outline-danger" id="delete-device-btn">
                             <i class="bi bi-trash"></i> Delete Device
                         </button>
                     </div>
@@ -249,8 +249,88 @@
             </div>
         </div>
     </div>
+
+    <!-- Delete Confirmation Modal -->
+    <div class="modal fade" id="deleteDeviceModal" tabindex="-1" aria-labelledby="deleteDeviceModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title" id="deleteDeviceModalLabel">
+                        <i class="bi bi-exclamation-triangle-fill"></i> デバイスの削除確認
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-2">以下のデバイスを本当に削除しますか？</p>
+                    <div class="alert alert-warning">
+                        <strong>デバイス名:</strong> {{ device.device_name }}<br>
+                        <strong>デバイスID:</strong> <code>{{ device.device_id }}</code>
+                    </div>
+                    <p class="text-danger mb-0">
+                        <i class="bi bi-info-circle-fill"></i>
+                        この操作は元に戻せません。デバイスに関連するすべてのセンサーデータも削除されます。
+                    </p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+                    <button type="button" class="btn btn-danger" id="confirm-delete-btn">
+                        <i class="bi bi-trash"></i> 削除する
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 {% endblock %}
 
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const deleteBtn = document.getElementById('delete-device-btn');
+    const confirmDeleteBtn = document.getElementById('confirm-delete-btn');
+    const deleteModal = new bootstrap.Modal(document.getElementById('deleteDeviceModal'));
+    const pageContainer = document.getElementById('device-detail-page');
+    const deviceId = pageContainer.dataset.deviceId;
 
+    // 削除ボタンクリック - モーダルを表示
+    deleteBtn.addEventListener('click', function() {
+        deleteModal.show();
+    });
 
+    // 確認ボタンクリック - デバイスを削除
+    confirmDeleteBtn.addEventListener('click', async function() {
+        confirmDeleteBtn.disabled = true;
+        confirmDeleteBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 削除中...';
+
+        try {
+            const response = await fetch(`/api/device/${deviceId}`, {
+                method: 'DELETE',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            const result = await response.json();
+
+            if (response.ok && result.success) {
+                // 成功メッセージを表示してデバイス一覧ページにリダイレクト
+                deleteModal.hide();
+                showAlert('success', result.message, 'device-detail-alert-box');
+
+                // 2秒後にデバイス一覧ページにリダイレクト
+                setTimeout(function() {
+                    window.location.href = "{{ url_for('devices.devices_profiles') }}";
+                }, 2000);
+            } else {
+                throw new Error(result.message || 'デバイスの削除に失敗しました。');
+            }
+        } catch (error) {
+            deleteModal.hide();
+            showAlert('danger', `エラー: ${error.message}`, 'device-detail-alert-box');
+            confirmDeleteBtn.disabled = false;
+            confirmDeleteBtn.innerHTML = '<i class="bi bi-trash"></i> 削除する';
+        }
+    });
+});
+</script>
+{% endblock %}

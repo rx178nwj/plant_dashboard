@@ -164,12 +164,12 @@ function initializeDeviceThreshold() {
             if (!response.ok || !result.success) {
                 throw new Error(result.message || 'Failed to save profile.');
             }
-            showAlert(alertBox, 'success', 'Watering profile saved successfully to the database!');
+            showAlert('success', 'Watering profile saved successfully to the database!', 'device-threshold-alert-box');
 
             // Refresh chart with new thresholds
             await fetchAndDisplayChart(deviceId, managedPlantId);
         } catch (error) {
-            showAlert(alertBox, 'danger', `Error: ${error.message}`);
+            showAlert('danger', `Error: ${error.message}`, 'device-threshold-alert-box');
         } finally {
             saveBtn.disabled = false;
             saveBtn.innerHTML = 'Save Profile to DB';
@@ -203,9 +203,9 @@ function initializeDeviceThreshold() {
             if (!response.ok || !result.success) {
                 throw new Error(result.message || 'Failed to write to device.');
             }
-            showAlert(alertBox, 'success', 'Command sent to device successfully!');
+            showAlert('success', 'Command sent to device successfully!', 'device-threshold-alert-box');
         } catch (error) {
-            showAlert(alertBox, 'danger', `Error writing to device: ${error.message}`);
+            showAlert('danger', `Error writing to device: ${error.message}`, 'device-threshold-alert-box');
         } finally {
             writeBtn.disabled = false;
             writeBtn.innerHTML = '<i class="bi bi-bluetooth"></i> Write to Device';
@@ -246,7 +246,7 @@ function initializeDeviceThreshold() {
 
         } catch (error) {
             console.error('Profile fetch error:', error);
-            showAlert(alertBox, 'warning', 'Could not load existing profile settings.');
+            showAlert('warning', 'Could not load existing profile settings.', 'device-threshold-alert-box');
         }
     }
 
@@ -334,7 +334,7 @@ function initializeDeviceThreshold() {
             });
         } catch (error) {
             console.error('Chart display error:', error);
-            showAlert(alertBox, 'danger', 'Failed to load chart data.');
+            showAlert('danger', 'Failed to load chart data.', 'device-threshold-alert-box');
         } finally {
             loader.classList.add('d-none');
             canvas.style.visibility = 'visible';
