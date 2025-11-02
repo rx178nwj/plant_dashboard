@@ -235,23 +235,46 @@ class PlantDeviceBLE:
                 logger.warning(f"[{self.device_id}] Failed to stop notifications: {e}")
 
 
-def _parse_switchbot_adv_data(adv_data):
+def _parse_switchbot_adv_data(address, adv_data):
     """SwitchBotのAdvertisingデータを解析する内部ヘルパー関数"""
     if SWITCHBOT_COMMON_SERVICE_UUID in adv_data.service_data:
         service_data = adv_data.service_data[SWITCHBOT_COMMON_SERVICE_UUID]
         model = service_data[0] & 0b01111111
-        battery = service_data[1] & 0b01111111
+        
         if model == 0x69: # SwitchBot Meter Plus
+            battery = service_data[2] & 0b01111111
             temperature = (service_data[3] & 0b00001111) / 10.0 + (service_data[4] & 0b01111111)
             if not (service_data[4] & 0b10000000):
                 temperature = -temperature
             humidity = service_data[5] & 0b01111111
             return {'type': 'switchbot_meter_plus', 'data': {'temperature': temperature, 'humidity': humidity, 'battery_level': battery}}
+        if model == 0x54: # SwitchBot Meter
+            logger.debug(f"Address {address}:")
+            logger.debug(f"SwitchBot Meter detected.")
+            logger.debug(f"service_data: {service_data[0:].hex()}")
+            battery = service_data[2] & 0b01111111
+            temperature = (service_data[3] & 0b00001111) / 10.0 + (service_data[4] & 0b01111111)
+            if not (service_data[4] & 0b10000000):
+                temperature = -temperature
+            humidity = service_data[5] & 0b01111111
+            logger.debug(f"Parsed Temperature: {temperature}, Humidity: {humidity}, Battery: {battery}")
+            return {'type': 'switchbot_meter', 'data': {'temperature': temperature, 'humidity': humidity, 'battery_level': battery}}
+        if model == 0x25: # SwitchBot Mini Hub
+            logger.info(f"Address {address}:")
+            logger.info(f"SwitchBot Mini Hub detected. No sensor data available.")
+            return None
         elif model == 0x63: # SwitchBot CO2 Meter
+            battery = service_data[2] & 0b01111111
             temperature = (service_data[5] & 0b01111111) + (service_data[4] / 10.0)
             humidity = service_data[6] & 0b01111111
             co2 = int.from_bytes(service_data[7:9], 'little')
             return {'type': 'switchbot_co2_meter', 'data': {'temperature': temperature, 'humidity': humidity, 'co2': co2, 'battery_level': battery}}
+        else:
+            logger.info(f"Address {address}:")
+            logger.info(f"Unknown SwitchBot model: {hex(model)}")
+            logger.info(f"Service data: {service_data.hex()}") 
+            logger.info(f"Advertisement data: {adv_data}")
+
     elif SWITCHBOT_LEGACY_METER_UUID in adv_data.service_data: # SwitchBot Meter (Legacy)
         service_data = adv_data.service_data[SWITCHBOT_LEGACY_METER_UUID]
         battery = service_data[2] & 0b01111111
@@ -274,7 +297,7 @@ async def scan_devices():
             if PLANT_SERVICE_UUID in adv_data.service_uuids:
                 found_devices.append({'address': device.address, 'name': device.name or 'Unknown Plant Sensor', 'type': 'plant_sensor', 'rssi': device.rssi})
                 continue
-            switchbot_info = _parse_switchbot_adv_data(adv_data)
+            switchbot_info = _parse_switchbot_adv_data(address, adv_data)
             if switchbot_info:
                 device_name_map = {'switchbot_meter': 'SwitchBot Meter', 'switchbot_meter_plus': 'SwitchBot Meter Plus', 'switchbot_co2_meter': 'SwitchBot CO2 Meter'}
                 found_devices.append({'address': device.address, 'name': device.name or device_name_map.get(switchbot_info['type'], 'Unknown SwitchBot'), 'type': switchbot_info['type'], 'rssi': device.rssi, 'data': switchbot_info.get('data')})

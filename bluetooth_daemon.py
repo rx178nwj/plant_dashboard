@@ -26,30 +26,55 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger(__name__)
-
+# ロガーのレベルをDEBUGに設定
+logger.setLevel(logging.DEBUG)
 
 # --- ble_manager.pyから移動した関数群 ---
 
 SWITCHBOT_LEGACY_METER_UUID = "cba20d00-224d-11e6-9fb8-0002a5d5c51b"
 SWITCHBOT_COMMON_SERVICE_UUID = "0000fd3d-0000-1000-8000-00805f9b34fb"
 
-def _parse_switchbot_adv_data(adv_data):
+def _parse_switchbot_adv_data(address, adv_data):
     """SwitchBotのAdvertisingデータを解析する内部ヘルパー関数"""
     if SWITCHBOT_COMMON_SERVICE_UUID in adv_data.service_data:
         service_data = adv_data.service_data[SWITCHBOT_COMMON_SERVICE_UUID]
         model = service_data[0] & 0b01111111
-        battery = service_data[1] & 0b01111111
+        logger.info(f"Address {address}:")
+        logger.info(f"SwitchBot model: {hex(model)}")
         if model == 0x69: # SwitchBot Meter Plus
+            battery = service_data[2] & 0b01111111
             temperature = (service_data[3] & 0b00001111) / 10.0 + (service_data[4] & 0b01111111)
             if not (service_data[4] & 0b10000000):
                 temperature = -temperature
             humidity = service_data[5] & 0b01111111
             return {'type': 'switchbot_meter_plus', 'data': {'temperature': temperature, 'humidity': humidity, 'battery_level': battery}}
+        if model == 0x54: # SwitchBot Meter
+            logger.debug(f"Address {address}:")
+            logger.debug(f"SwitchBot Meter detected.")
+            logger.debug(f"service_data: {service_data[0:].hex()}")
+            battery = service_data[2] & 0b01111111
+            temperature = (service_data[3] & 0b00001111) / 10.0 + (service_data[4] & 0b01111111)
+            if not (service_data[4] & 0b10000000):
+                temperature = -temperature
+            humidity = service_data[5] & 0b01111111
+            logger.debug(f"Parsed Temperature: {temperature}, Humidity: {humidity}, Battery: {battery}")
+            return {'type': 'switchbot_meter', 'data': {'temperature': temperature, 'humidity': humidity, 'battery_level': battery}}
+        if model == 0x25: # SwitchBot Mini Hub
+            logger.info(f"Address {address}:")
+            logger.info(f"SwitchBot Mini Hub detected. No sensor data available.")
+            return None
         elif model == 0x63: # SwitchBot CO2 Meter
+            battery = service_data[2] & 0b01111111
             temperature = (service_data[5] & 0b01111111) + (service_data[4] / 10.0)
             humidity = service_data[6] & 0b01111111
             co2 = int.from_bytes(service_data[7:9], 'little')
             return {'type': 'switchbot_co2_meter', 'data': {'temperature': temperature, 'humidity': humidity, 'co2': co2, 'battery_level': battery}}
+        else:
+            logger.info(f"Address {address}:")
+            logger.info(f"Unknown SwitchBot model: {hex(model)}")
+            logger.info(f"Service data: {service_data.hex()}") 
+            logger.info(f"Advertisement data: {adv_data}")
+
     elif SWITCHBOT_LEGACY_METER_UUID in adv_data.service_data: # SwitchBot Meter (Legacy)
         service_data = adv_data.service_data[SWITCHBOT_LEGACY_METER_UUID]
         battery = service_data[2] & 0b01111111
@@ -71,7 +96,7 @@ async def get_switchbot_adv_data(mac_address: str):
         if target_device_info:
             _device, adv_data = target_device_info
             if adv_data:
-                switchbot_info = _parse_switchbot_adv_data(adv_data)
+                switchbot_info = _parse_switchbot_adv_data(mac_address, adv_data)
                 if switchbot_info:
                     logger.debug(f"{mac_address} のデータを正常に解析しました")
                     return switchbot_info.get('data')
@@ -186,7 +211,9 @@ async def main_loop():
             device_type = device.get('device_type')
             mac_address = device.get('mac_address')
             sensor_data = None
-            
+
+            logger.info(f"device info: {device}")
+            logger.info(f"Polling device: {device.get('device_name')} ({dev_id}) of type {device_type} at {mac_address}")
             logger.info(f"デバイスをポーリング中: {device.get('device_name')} ({dev_id})")
 
             try:
