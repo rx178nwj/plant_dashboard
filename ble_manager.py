@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import struct
+from pathlib import Path
 from datetime import datetime
 from bleak import BleakClient, BleakScanner
 from bleak.exc import BleakError
@@ -20,6 +21,19 @@ SWITCHBOT_COMMON_SERVICE_UUID = "0000fd3d-0000-1000-8000-00805f9b34fb"
 CMD_GET_SENSOR_DATA = 0x01
 CMD_SET_WATERING_THRESHOLDS = 0x02
 
+# Ensure log directory exists
+config.LOG_FILE_PATH = "/var/log/plant_dashboard/bluetooth_manager.log"
+log_dir = Path(config.LOG_FILE_PATH).parent
+log_dir.mkdir(parents=True, exist_ok=True)
+
+logging.basicConfig(
+    level=config.LOG_LEVEL,
+    format='%(asctime)s - [Ble_Manager] - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler(config.LOG_FILE_PATH),
+        logging.StreamHandler()
+    ]
+)
 logger = logging.getLogger(__name__)
 
 class PlantDeviceBLE:
