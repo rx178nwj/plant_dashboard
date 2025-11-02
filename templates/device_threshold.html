@@ -1,56 +1,100 @@
 {% extends "layout.html" %}
 
-{% block title %}Watering Profiles{% endblock %}
+{% block title %}Device Threshold Configuration{% endblock %}
 
 {% block content %}
-<div id="watering-profiles-page">
+<div id="device-threshold-page"
+     data-device-id="{{ device.device_id }}"
+     data-managed-plant-id="{{ device.assigned_plant.managed_plant_id if device.assigned_plant else '' }}"
+     data-library-plant-id="{{ device.assigned_plant.library_plant_id if device.assigned_plant else '' }}">
+
+    <!-- Alert box for this page -->
+    <div id="device-threshold-alert-box"></div>
+
     <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
-        <h1 class="h2">Watering Profile Editor</h1>
+        <h1 class="h2">
+            <i class="bi bi-sliders"></i> Threshold Configuration - {{ device.device_name }}
+        </h1>
+        <div class="btn-toolbar mb-2 mb-md-0">
+            <a href="{{ url_for('devices.device_profile_detail', device_id=device.device_id) }}" class="btn btn-outline-secondary">
+                <i class="bi bi-arrow-left"></i> Back to Device
+            </a>
+        </div>
     </div>
 
-    <div class="alert alert-info" role="alert">
-        <i class="bi bi-info-circle-fill"></i>
-        Select a plant to view its soil moisture history and configure watering thresholds. The chart displays the last 30 days of data.
+    {% if not device.assigned_plant %}
+    <div class="alert alert-warning" role="alert">
+        <i class="bi bi-exclamation-triangle-fill"></i>
+        <strong>No Plant Assigned</strong>
+        <p class="mb-0">This device does not have an assigned plant. Please assign a plant first to configure watering thresholds.</p>
+        <a href="{{ url_for('management.management') }}" class="btn btn-sm btn-outline-primary mt-2">
+            <i class="bi bi-plus-circle"></i> Assign Plant
+        </a>
     </div>
-
+    {% else %}
     <div class="row">
+        <!-- Device and Plant Information Sidebar -->
         <div class="col-md-4">
-            <div class="card">
-                <div class="card-header">
-                    Plants with Soil Sensors
+            <div class="card mb-4">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="bi bi-cpu"></i> Device Information</h5>
                 </div>
-                <div id="plant-list-profiles" class="list-group list-group-flush">
-                    {% for plant in plants_with_sensors %}
-                    <a href="#" class="list-group-item list-group-item-action" 
-                       data-managed-plant-id="{{ plant.managed_plant_id }}"
-                       data-library-plant-id="{{ plant.library_plant_id }}"
-                       data-sensor-id="{{ plant.assigned_plant_sensor_id }}">
-                        {{ plant.plant_name }}
-                    </a>
-                    {% else %}
-                    <div class="list-group-item">No plants with assigned soil sensors found.</div>
-                    {% endfor %}
+                <div class="card-body">
+                    <div class="row mb-2">
+                        <div class="col-12 fw-bold">Device Name:</div>
+                        <div class="col-12">{{ device.device_name }}</div>
+                    </div>
+                    <div class="row mb-2">
+                        <div class="col-12 fw-bold">Device ID:</div>
+                        <div class="col-12"><code>{{ device.device_id }}</code></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card mb-4">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0"><i class="bi bi-flower2"></i> Assigned Plant</h5>
+                </div>
+                <div class="card-body text-center">
+                    {% if device.assigned_plant.display_image_url %}
+                    <img src="{{ device.assigned_plant.display_image_url }}"
+                         onerror="this.onerror=null;this.src='https://placehold.co/200x300/eeeeee/cccccc?text=No+Image';"
+                         class="img-fluid rounded mb-3"
+                         style="max-height: 200px; object-fit: cover;"
+                         alt="{{ device.assigned_plant.plant_name }}">
+                    {% endif %}
+                    <h5 class="card-title">{{ device.assigned_plant.plant_name }}</h5>
+                    <p class="text-muted">
+                        <em>{{ device.assigned_plant.genus }} {{ device.assigned_plant.species }}</em>
+                    </p>
                 </div>
             </div>
         </div>
 
+        <!-- Configuration Area -->
         <div class="col-md-8">
-            <div id="editor-area-profiles" class="card" style="display: none;">
+            <div class="card mb-4">
                 <div class="card-header">
-                    <h5 class="mb-0" id="editor-title-profiles"></h5>
+                    <h5 class="mb-0">Soil Moisture History (30 Days)</h5>
                 </div>
                 <div class="card-body">
                     <div class="position-relative mb-4" style="height:300px">
                         <canvas id="soil-history-chart"></canvas>
-                        <div id="chart-loader-profiles" class="position-absolute top-50 start-50 translate-middle d-none">
+                        <div id="chart-loader" class="position-absolute top-50 start-50 translate-middle d-none">
                             <div class="spinner-border text-primary" role="status">
                                 <span class="visually-hidden">Loading...</span>
                             </div>
                         </div>
                     </div>
+                </div>
+            </div>
 
-                    <form id="watering-profile-form">
-                        <input type="hidden" id="library-plant-id-input">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-sliders"></i> Watering Profile Configuration</h5>
+                </div>
+                <div class="card-body">
+                    <form id="threshold-config-form">
                         <h6><i class="bi bi-sliders"></i> Moisture Thresholds (Binary Value)</h6>
                         <div class="row align-items-center">
                             <div class="col-md-6 mb-3">
@@ -100,23 +144,25 @@
                     </form>
                 </div>
                 <div class="card-footer d-flex justify-content-between">
-                    <button class="btn btn-secondary" id="write-profile-btn"><i class="bi bi-bluetooth"></i> Write to Device</button>
-                    <button class="btn btn-primary" id="save-profile-btn">Save Profile to DB</button>
+                    <button class="btn btn-secondary" id="write-profile-btn">
+                        <i class="bi bi-bluetooth"></i> Write to Device
+                    </button>
+                    <button class="btn btn-primary" id="save-profile-btn">
+                        Save Profile to DB
+                    </button>
                 </div>
-            </div>
-            <div id="editor-placeholder-profiles" class="text-center text-muted pt-5">
-                <p><i class="bi bi-arrow-left-circle fs-1"></i></p>
-                <h4>Select a plant to begin</h4>
             </div>
         </div>
     </div>
+    {% endif %}
 </div>
 {% endblock %}
 
 {% block scripts %}
+<script src="{{ url_for('static', filename='js/device-threshold.js') }}"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    initializeWateringProfiles();
+    initializeDeviceThreshold();
 });
 </script>
 {% endblock %}

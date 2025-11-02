@@ -237,9 +237,9 @@
                             <i class="bi bi-pencil"></i> Edit Device
                         </button>
                         {% if device.device_type == 'plant_sensor' %}
-                        <button class="btn btn-outline-info" data-bs-toggle="modal" data-bs-target="#wateringProfileModal">
+                        <a href="{{ url_for('devices.device_threshold_config', device_id=device.device_id) }}" class="btn btn-outline-info">
                             <i class="bi bi-droplet"></i> Configure Thresholds
-                        </button>
+                        </a>
                         {% endif %}
                         <button class="btn btn-outline-danger" disabled>
                             <i class="bi bi-trash"></i> Delete Device
@@ -250,128 +250,6 @@
         </div>
     </div>
 </div>
-
-<!-- Watering Profile Modal -->
-<div class="modal fade" id="wateringProfileModal" tabindex="-1" aria-labelledby="wateringProfileModalLabel" aria-hidden="true">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="wateringProfileModalLabel"><i class="bi bi-sliders"></i> Configure Watering Profile</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <p>Set the soil moisture voltage thresholds. The device will use these to determine if the soil is "dry", "moist", or "wet".</p>
-                
-                <div class="mb-3">
-                    <label for="dry-threshold-slider" class="form-label">Dry Threshold: <span id="dry-threshold-value" class="fw-bold"></span></label>
-                    <input type="range" class="form-range" id="dry-threshold-slider" min="0" max="4095" step="1">
-                    <div class="form-text">Soil is considered "dry" above this value.</div>
-                </div>
-                <div class="mb-3">
-                    <label for="wet-threshold-slider" class="form-label">Wet Threshold: <span id="wet-threshold-value" class="fw-bold"></span></label>
-                    <input type="range" class="form-range" id="wet-threshold-slider" min="0" max="4095" step="1">
-                    <div class="form-text">Soil is considered "wet" below this value.</div>
-                </div>
-                
-                {% if not device.assigned_plant %}
-                <div class="alert alert-warning small">
-                    <i class="bi bi-exclamation-triangle"></i> No plant is assigned to this device. The default values may not be optimal.
-                </div>
-                {% endif %}
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                <button type="button" class="btn btn-primary" id="write-profile-to-device-btn">
-                    <i class="bi bi-bluetooth"></i> Write to Device
-                </button>
-            </div>
-        </div>
-    </div>
-</div>
-{% endblock %}
-
-{% block scripts %}
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    const pageContainer = document.getElementById('device-detail-page');
-    const wateringModalElement = document.getElementById('wateringProfileModal');
-    if (!pageContainer || !wateringModalElement) return;
-
-    const deviceId = pageContainer.dataset.deviceId;
-    const libraryPlantId = pageContainer.dataset.libraryPlantId;
-    const wateringModal = new bootstrap.Modal(wateringModalElement);
-
-    const drySlider = document.getElementById('dry-threshold-slider');
-    const wetSlider = document.getElementById('wet-threshold-slider');
-    const dryValueLabel = document.getElementById('dry-threshold-value');
-    const wetValueLabel = document.getElementById('wet-threshold-value');
-    const writeButton = document.getElementById('write-profile-to-device-btn');
-    const alertBox = document.getElementById('device-detail-alert-box');
-
-    // Update label when slider moves
-    drySlider.addEventListener('input', () => dryValueLabel.textContent = drySlider.value);
-    wetSlider.addEventListener('input', () => wetValueLabel.textContent = wetSlider.value);
-
-    // Fetch default profile when modal is about to open
-    wateringModalElement.addEventListener('show.bs.modal', async () => {
-        // Set default/initial values
-        let dryValue = 2800; // Default fallback
-        let wetValue = 1200; // Default fallback
-
-        if (libraryPlantId) {
-            try {
-                const response = await fetch(`/api/plant-watering-profile/${libraryPlantId}`);
-                if (response.ok) {
-                    const data = await response.json();
-                    dryValue = data.soil_moisture_dry_threshold_voltage || dryValue;
-                    wetValue = data.soil_moisture_wet_threshold_voltage || wetValue;
-                }
-            } catch (error) {
-                console.error('Failed to fetch watering profile:', error);
-            }
-        }
-        
-        drySlider.value = dryValue;
-        wetSlider.value = wetValue;
-        dryValueLabel.textContent = dryValue;
-        wetValueLabel.textContent = wetValue;
-    });
-
-    // Handle "Write to Device" button click
-    writeButton.addEventListener('click', async () => {
-        const dryThreshold = parseInt(drySlider.value, 10);
-        const wetThreshold = parseInt(wetSlider.value, 10);
-
-        writeButton.disabled = true;
-        writeButton.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Writing...';
-
-        try {
-            const response = await fetch(`/api/device/${deviceId}/write-watering-profile`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    dry_threshold: dryThreshold,
-                    wet_threshold: wetThreshold
-                })
-            });
-
-            const result = await response.json();
-
-            if (result.success) {
-                showAlert(alertBox, 'success', `Successfully sent command to write thresholds (${dryThreshold}, ${wetThreshold}) to device.`);
-            } else {
-                throw new Error(result.message || 'Unknown error occurred.');
-            }
-        } catch (error) {
-            showAlert(alertBox, 'danger', `Failed to write to device: ${error.message}`);
-        } finally {
-            writeButton.disabled = false;
-            writeButton.innerHTML = '<i class="bi bi-bluetooth"></i> Write to Device';
-            wateringModal.hide();
-        }
-    });
-});
-</script>
 {% endblock %}
 
 

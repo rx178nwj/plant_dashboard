@@ -1,22 +1,29 @@
-// static/js/watering-profiles.js
+// static/js/device-threshold.js
 
 /**
- * Initializes the functionality for the Watering Profiles page.
+ * Initializes the functionality for the Device Threshold Configuration page.
  */
-function initializeWateringProfiles() {
-    const pageContainer = document.getElementById('watering-profiles-page');
+function initializeDeviceThreshold() {
+    const pageContainer = document.getElementById('device-threshold-page');
     if (!pageContainer) return;
 
+    const deviceId = pageContainer.dataset.deviceId;
+    const managedPlantId = pageContainer.dataset.managedPlantId;
+    const libraryPlantId = pageContainer.dataset.libraryPlantId;
+
+    // If no plant is assigned, there's nothing to configure
+    if (!managedPlantId) {
+        console.log('No plant assigned to this device. Configuration not available.');
+        return;
+    }
+
     // DOM element references
-    const plantList = document.getElementById('plant-list-profiles');
-    const editorArea = document.getElementById('editor-area-profiles');
-    const placeholder = document.getElementById('editor-placeholder-profiles');
-    const editorTitle = document.getElementById('editor-title-profiles');
     const saveBtn = document.getElementById('save-profile-btn');
     const writeBtn = document.getElementById('write-profile-btn');
+    const alertBox = document.getElementById('device-threshold-alert-box');
 
-    if (!plantList || !editorArea || !placeholder || !writeBtn || !saveBtn) {
-        console.error("Watering profiles page is missing one or more key elements.");
+    if (!writeBtn || !saveBtn) {
+        console.error("Device threshold page is missing one or more key elements.");
         return;
     }
 
@@ -35,8 +42,8 @@ function initializeWateringProfiles() {
     const wateringDaysColdInput = document.getElementById('watering-days-cold-dormancy');
 
     const canvas = document.getElementById('soil-history-chart');
-    const loader = document.getElementById('chart-loader-profiles');
-    let chartInstance = null;
+    const loader = document.getElementById('chart-loader');
+    let chartInstance = null; // To hold the Chart.js instance
 
     // Synchronization: Slider <-> Input <-> Label (Binary Value: 0-4095)
     // Voltage display is reference only
@@ -120,44 +127,19 @@ function initializeWateringProfiles() {
         }
     });
 
-    /**
-     * Handles clicks on the plant list.
-     */
-    plantList.addEventListener('click', async (e) => {
-        e.preventDefault();
-        const target = e.target.closest('.list-group-item');
-        if (!target) return;
-
-        plantList.querySelectorAll('.list-group-item').forEach(el => el.classList.remove('active'));
-        target.classList.add('active');
-
-        const { managedPlantId, sensorId } = target.dataset;
-        editorTitle.textContent = `Editing: ${target.textContent.trim()}`;
-
-        placeholder.style.display = 'none';
-        editorArea.style.display = 'block';
-
-        console.log(`Plant selected. Managed ID: ${managedPlantId}, Sensor ID: ${sensorId}`);
-
+    // Load initial data
+    (async function() {
         await Promise.all([
             fetchAndDisplayProfile(managedPlantId),
-            fetchAndDisplayChart(sensorId, managedPlantId)
+            fetchAndDisplayChart(deviceId, managedPlantId)
         ]);
-    });
+    })();
 
     /**
      * Handles the save button click event.
      */
     saveBtn.addEventListener('click', async () => {
         console.log("Save Profile button clicked.");
-        const activePlant = plantList.querySelector('.list-group-item.active');
-        if (!activePlant) {
-            showAlert('warning', 'Please select a plant from the list first.', 'main-alert-box');
-            return;
-        }
-
-        const { managedPlantId, sensorId } = activePlant.dataset;
-        if (!managedPlantId) return;
 
         // Save binary values (0-4095) directly to DB
         const profileData = {
@@ -182,13 +164,12 @@ function initializeWateringProfiles() {
             if (!response.ok || !result.success) {
                 throw new Error(result.message || 'Failed to save profile.');
             }
-            showAlert('success', 'Watering profile saved successfully to the database!', 'main-alert-box');
+            showAlert(alertBox, 'success', 'Watering profile saved successfully to the database!');
 
-            if(activePlant) {
-                fetchAndDisplayChart(sensorId, managedPlantId);
-            }
+            // Refresh chart with new thresholds
+            await fetchAndDisplayChart(deviceId, managedPlantId);
         } catch (error) {
-            showAlert('danger', `Error: ${error.message}`, 'main-alert-box');
+            showAlert(alertBox, 'danger', `Error: ${error.message}`);
         } finally {
             saveBtn.disabled = false;
             saveBtn.innerHTML = 'Save Profile to DB';
@@ -200,17 +181,6 @@ function initializeWateringProfiles() {
      */
     writeBtn.addEventListener('click', async () => {
         console.log("Write to Device button clicked.");
-        const activePlant = plantList.querySelector('.list-group-item.active');
-        if (!activePlant) {
-            showAlert('warning', 'Please select a plant from the list before writing to a device.', 'main-alert-box');
-            return;
-        }
-
-        const { sensorId } = activePlant.dataset;
-        if (!sensorId) {
-            showAlert('warning', 'No sensor ID is associated with this plant. Cannot write to device.', 'main-alert-box');
-            return;
-        }
 
         // Send binary values (0-4095) directly to device
         const profileData = {
@@ -218,13 +188,13 @@ function initializeWateringProfiles() {
             wet_threshold: parseInt(wetThresholdInput.value, 10) || 0,
         };
 
-        console.log(`Preparing to write to device ${sensorId} with payload:`, profileData);
+        console.log(`Preparing to write to device ${deviceId} with payload:`, profileData);
 
         writeBtn.disabled = true;
         writeBtn.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Writing...`;
 
         try {
-            const response = await fetch(`/api/device/${sensorId}/write-watering-profile`, {
+            const response = await fetch(`/api/device/${deviceId}/write-watering-profile`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(profileData)
@@ -233,15 +203,18 @@ function initializeWateringProfiles() {
             if (!response.ok || !result.success) {
                 throw new Error(result.message || 'Failed to write to device.');
             }
-            showAlert('success', 'Command sent to device successfully!', 'main-alert-box');
+            showAlert(alertBox, 'success', 'Command sent to device successfully!');
         } catch (error) {
-            showAlert('danger', `Error writing to device: ${error.message}`, 'main-alert-box');
+            showAlert(alertBox, 'danger', `Error writing to device: ${error.message}`);
         } finally {
             writeBtn.disabled = false;
             writeBtn.innerHTML = '<i class="bi bi-bluetooth"></i> Write to Device';
         }
     });
 
+    /**
+     * Fetches and displays the watering profile for the managed plant.
+     */
     async function fetchAndDisplayProfile(managedPlantId) {
         try {
             const response = await fetch(`/api/managed-plant-watering-profile/${managedPlantId}`);
@@ -273,10 +246,13 @@ function initializeWateringProfiles() {
 
         } catch (error) {
             console.error('Profile fetch error:', error);
-            showAlert('warning', 'Could not load existing profile settings.', 'main-alert-box');
+            showAlert(alertBox, 'warning', 'Could not load existing profile settings.');
         }
     }
 
+    /**
+     * Fetches sensor history and displays it in a chart with threshold lines.
+     */
     async function fetchAndDisplayChart(sensorId, managedPlantId) {
         if (chartInstance) {
             chartInstance.destroy();
@@ -358,7 +334,7 @@ function initializeWateringProfiles() {
             });
         } catch (error) {
             console.error('Chart display error:', error);
-            showAlert('danger', 'Failed to load chart data.', 'main-alert-box');
+            showAlert(alertBox, 'danger', 'Failed to load chart data.');
         } finally {
             loader.classList.add('d-none');
             canvas.style.visibility = 'visible';
