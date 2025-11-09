@@ -5,6 +5,7 @@ import logging
 import struct
 from pathlib import Path
 from datetime import datetime
+from functools import wraps
 from bleak import BleakClient, BleakScanner
 from bleak.exc import BleakError
 
@@ -36,6 +37,48 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+
+def retry_on_failure(max_attempts=None, delay=None, exceptions=(BleakError, asyncio.TimeoutError)):
+    """
+    BLE操作の失敗時に自動リトライを行うデコレーター
+
+    Args:
+        max_attempts: リトライの最大試行回数（デフォルト: config.BLE_OPERATION_RETRY_ATTEMPTS）
+        delay: リトライ間の待機時間（秒）（デフォルト: config.BLE_OPERATION_RETRY_DELAY）
+        exceptions: リトライ対象の例外のタプル
+    """
+    if max_attempts is None:
+        max_attempts = config.BLE_OPERATION_RETRY_ATTEMPTS
+    if delay is None:
+        delay = config.BLE_OPERATION_RETRY_DELAY
+
+    def decorator(func):
+        @wraps(func)
+        async def wrapper(self, *args, **kwargs):
+            last_exception = None
+            for attempt in range(max_attempts):
+                try:
+                    result = await func(self, *args, **kwargs)
+                    if attempt > 0:
+                        logger.info(f"[{self.device_id}] 操作が {attempt + 1} 回目の試行で成功しました")
+                    return result
+                except exceptions as e:
+                    last_exception = e
+                    if attempt < max_attempts - 1:
+                        logger.warning(
+                            f"[{self.device_id}] {func.__name__} が失敗しました "
+                            f"(試行 {attempt + 1}/{max_attempts}): {e}. "
+                            f"{delay}秒後にリトライします..."
+                        )
+                        await asyncio.sleep(delay)
+                    else:
+                        logger.error(
+                            f"[{self.device_id}] {func.__name__} が {max_attempts} 回の試行後も失敗しました: {e}"
+                        )
+            return None
+        return wrapper
+    return decorator
+
 class PlantDeviceBLE:
     """
     プラントモニターデバイスとのBLE通信を管理するクラス。
@@ -49,24 +92,33 @@ class PlantDeviceBLE:
 
     async def connect(self):
         """デバイスへの接続を試みる"""
-        logger.info(f"[{self.device_id}] Attempting to connect to {self.mac_address}...")
+        logger.info(f"[{self.device_id}] {self.mac_address} への接続を試みています...")
         try:
-            device = await BleakScanner.find_device_by_address(self.mac_address, timeout=5.0)
+            device = await BleakScanner.find_device_by_address(
+                self.mac_address,
+                timeout=config.BLE_SCAN_TIMEOUT
+            )
             if device is None:
-                logger.error(f"[{self.device_id}] Device with address {self.mac_address} was not found during scan.")
+                logger.error(
+                    f"[{self.device_id}] スキャン中にアドレス {self.mac_address} のデバイスが見つかりませんでした "
+                    f"(タイムアウト: {config.BLE_SCAN_TIMEOUT}秒)"
+                )
                 self.is_connected = False
                 return False
-            
-            logger.info(f"[{self.device_id}] Device found, proceeding with connection.")
-            await self.client.connect(timeout=10.0)
+
+            logger.info(f"[{self.device_id}] デバイスが見つかりました。接続を開始します。")
+            await self.client.connect(timeout=config.BLE_CONNECT_TIMEOUT)
             self.is_connected = self.client.is_connected
             if self.is_connected:
-                logger.info(f"[{self.device_id}] Connection successful.")
+                logger.info(f"[{self.device_id}] 接続に成功しました。")
             else:
-                logger.warning(f"[{self.device_id}] Connection attempt failed.")
+                logger.warning(f"[{self.device_id}] 接続の試行に失敗しました。")
             return self.is_connected
         except (BleakError, asyncio.TimeoutError) as e:
-            logger.error(f"[{self.device_id}] Failed to connect: {e}")
+            logger.error(
+                f"[{self.device_id}] 接続に失敗しました "
+                f"(タイムアウト: {config.BLE_CONNECT_TIMEOUT}秒): {e}"
+            )
             self.is_connected = False
             return False
 
@@ -95,24 +147,26 @@ class PlantDeviceBLE:
         logger.error(f"[{self.device_id}] Failed to reconnect after {config.RECONNECT_ATTEMPTS} attempts.")
         return False
     
+    @retry_on_failure()
     async def set_watering_thresholds(self, dry_threshold_mv, wet_threshold_mv):
         """
         水やり閾値をデバイスに書き込みます。
+        リトライ機能とタイムアウト設定を含む。
         """
         if not await self.ensure_connection():
-            return False
+            raise BleakError(f"デバイス {self.device_id} への接続を確立できませんでした")
 
         notification_received = asyncio.Event()
         success = False
 
         def notification_handler(sender: int, data: bytearray):
             nonlocal success
-            logger.debug(f"[{self.device_id}] Write Response from {sender}: {data.hex()}")
+            logger.debug(f"[{self.device_id}] 書き込み応答を受信 from {sender}: {data.hex()}")
             if len(data) >= 3:
                 resp_id, status_code, resp_seq = struct.unpack('<BBB', data[:3])
                 if resp_id == CMD_SET_WATERING_THRESHOLDS and status_code == 0 and resp_seq == self.sequence_num:
                     success = True
-                    logger.info(f"[{self.device_id}] Successfully received confirmation for setting thresholds.")
+                    logger.info(f"[{self.device_id}] 閾値設定の確認応答を受信しました")
             notification_received.set()
 
         try:
@@ -121,32 +175,47 @@ class PlantDeviceBLE:
             self.sequence_num = (self.sequence_num + 1) % 256
             payload = struct.pack('<HH', int(dry_threshold_mv), int(wet_threshold_mv))
             command_packet = struct.pack('<BBH', CMD_SET_WATERING_THRESHOLDS, self.sequence_num, len(payload)) + payload
-            
-            logger.info(f"[{self.device_id}] Writing watering thresholds to {COMMAND_CHAR_UUID}: {command_packet.hex()}")
+
+            logger.info(
+                f"[{self.device_id}] 水やり閾値を {COMMAND_CHAR_UUID} へ書き込み中: "
+                f"Dry={dry_threshold_mv}mV, Wet={wet_threshold_mv}mV"
+            )
             await self.client.write_gatt_char(COMMAND_CHAR_UUID, command_packet)
-            
-            logger.debug(f"[{self.device_id}] Waiting for write confirmation...")
-            await asyncio.wait_for(notification_received.wait(), timeout=10.0)
-            
-            return success
+
+            logger.debug(
+                f"[{self.device_id}] 書き込み確認を待機中 "
+                f"(タイムアウト: {config.BLE_OPERATION_TIMEOUT}秒)..."
+            )
+            await asyncio.wait_for(notification_received.wait(), timeout=config.BLE_OPERATION_TIMEOUT)
+
+            if not success:
+                raise BleakError("閾値設定の確認応答が正しく受信されませんでした")
+
+            return True
 
         except asyncio.TimeoutError:
-            logger.error(f"[{self.device_id}] Timed out waiting for write response.")
-            return False
-        except BleakError as e:
-            logger.error(f"[{self.device_id}] BLE error while writing thresholds: {e}")
+            logger.error(
+                f"[{self.device_id}] 書き込み応答の待機中にタイムアウトしました "
+                f"(タイムアウト: {config.BLE_OPERATION_TIMEOUT}秒)"
+            )
             self.is_connected = False
-            return False
+            raise
+        except BleakError as e:
+            logger.error(f"[{self.device_id}] 閾値書き込み中にBLEエラーが発生: {e}")
+            self.is_connected = False
+            raise
         finally:
             if self.client.is_connected:
                 await self.client.stop_notify(RESPONSE_CHAR_UUID)
 
+    @retry_on_failure()
     async def get_sensor_data(self):
         """
         コマンドを書き込み、別のキャラクタリスティックからの通知でレスポンスを受け取る。
+        リトライ機能とタイムアウト設定を含む。
         """
         if not await self.ensure_connection():
-            return None
+            raise BleakError(f"デバイス {self.device_id} への接続を確立できませんでした")
 
         notification_received = asyncio.Event()
         received_data = None
@@ -158,41 +227,44 @@ class PlantDeviceBLE:
             notification_received.set()
 
         try:
-            logger.debug(f"[{self.device_id}] Starting notifications on {RESPONSE_CHAR_UUID}")
+            logger.debug(f"[{self.device_id}] {RESPONSE_CHAR_UUID} で通知を開始します")
             await self.client.start_notify(RESPONSE_CHAR_UUID, notification_handler)
 
             self.sequence_num = (self.sequence_num + 1) % 256
             command_packet = struct.pack('<BBH', CMD_GET_SENSOR_DATA, self.sequence_num, 0)
-            
-            logger.debug(f"[{self.device_id}] Writing command to {COMMAND_CHAR_UUID}: {command_packet.hex()}")
+
+            logger.debug(f"[{self.device_id}] {COMMAND_CHAR_UUID} へコマンドを送信: {command_packet.hex()}")
             await self.client.write_gatt_char(COMMAND_CHAR_UUID, command_packet)
-            
-            logger.debug(f"[{self.device_id}] Waiting for notification...")
-            await asyncio.wait_for(notification_received.wait(), timeout=10.0)
+
+            logger.debug(
+                f"[{self.device_id}] 通知を待機中 "
+                f"(タイムアウト: {config.BLE_OPERATION_TIMEOUT}秒)..."
+            )
+            await asyncio.wait_for(notification_received.wait(), timeout=config.BLE_OPERATION_TIMEOUT)
 
             if received_data is None:
-                logger.warning(f"[{self.device_id}] Notification event was set, but no data was received.")
-                return None
+                logger.warning(f"[{self.device_id}] 通知イベントがセットされましたが、データが受信されませんでした")
+                raise BleakError("通知データが受信されませんでした")
 
             if len(received_data) < 5:
-                logger.warning(f"[{self.device_id}] Response header is too short: {len(received_data)} bytes")
-                return None
-            
+                logger.warning(f"[{self.device_id}] レスポンスヘッダーが短すぎます: {len(received_data)} バイト")
+                raise BleakError(f"レスポンスヘッダーが短すぎます: {len(received_data)} バイト")
+
             resp_id, status_code, resp_seq, data_len = struct.unpack('<BBBH', received_data[:5])
-            
-            logger.debug(f"[{self.device_id}] Parsed header: ID={resp_id}, Status={status_code}, Seq={resp_seq}, Len={data_len}")
+
+            logger.debug(f"[{self.device_id}] 解析されたヘッダー: ID={resp_id}, Status={status_code}, Seq={resp_seq}, Len={data_len}")
 
             if resp_seq != self.sequence_num:
-                logger.warning(f"[{self.device_id}] Sequence number mismatch. Expected {self.sequence_num}, got {resp_seq}")
+                logger.warning(f"[{self.device_id}] シーケンス番号の不一致。期待値: {self.sequence_num}, 受信: {resp_seq}")
 
             payload = received_data[5:]
             if len(payload) != data_len:
-                logger.error(f"[{self.device_id}] Payload length mismatch. Header says {data_len}, but got {len(payload)}")
-                return None
+                logger.error(f"[{self.device_id}] ペイロード長の不一致。ヘッダー: {data_len}, 実際: {len(payload)}")
+                raise BleakError(f"ペイロード長の不一致: 期待 {data_len}, 実際 {len(payload)}")
 
             if data_len == 56:
                 unpacked_data = struct.unpack('<9i4f?3x', payload)
-                
+
                 tm_sec, tm_min, tm_hour, tm_mday, tm_mon, tm_year, tm_wday, tm_yday, tm_isdst, \
                 lux, temp, humidity, soil, error = unpacked_data
 
@@ -200,39 +272,43 @@ class PlantDeviceBLE:
                 dt_str = dt.strftime("%Y-%m-%d %H:%M:%S")
 
             else:
-                logger.error(f"[{self.device_id}] Unsupported data length in payload: {data_len}.")
-                return None
+                logger.error(f"[{self.device_id}] サポートされていないペイロード長: {data_len}")
+                raise BleakError(f"サポートされていないペイロード長: {data_len}")
 
             sensor_data = {
                 'datetime': dt_str, 'light_lux': lux, 'temperature': temp,
                 'humidity': humidity, 'soil_moisture': soil, 'sensor_error': error,
                 'battery_level': None
             }
-            
-            logger.info(f"[{self.device_id}] Successfully parsed data from notification: {sensor_data}")
+
+            logger.info(f"[{self.device_id}] センサーデータの解析に成功: {sensor_data}")
             return sensor_data
 
-        except asyncio.TimeoutError:
-            logger.error(f"[{self.device_id}] Timed out waiting for notification.")
-            return None
+        except asyncio.TimeoutError as e:
+            logger.error(
+                f"[{self.device_id}] 通知の待機中にタイムアウトしました "
+                f"(タイムアウト: {config.BLE_OPERATION_TIMEOUT}秒)"
+            )
+            self.is_connected = False
+            raise
         except BleakError as e:
-            logger.error(f"[{self.device_id}] BLE communication failed: {e}")
+            logger.error(f"[{self.device_id}] BLE通信に失敗しました: {e}")
             self.is_connected = False
-            return None
+            raise
         except struct.error as e:
-            logger.error(f"[{self.device_id}] Failed to unpack response data: {e}. Payload was {payload.hex() if 'payload' in locals() else 'N/A'}")
-            return None
+            logger.error(f"[{self.device_id}] レスポンスデータの解析に失敗: {e}. ペイロード: {payload.hex() if 'payload' in locals() else 'N/A'}")
+            raise BleakError(f"データ解析エラー: {e}")
         except Exception as e:
-            logger.error(f"[{self.device_id}] An unexpected error occurred in get_sensor_data: {e}")
+            logger.error(f"[{self.device_id}] get_sensor_data で予期しないエラーが発生: {e}", exc_info=True)
             self.is_connected = False
-            return None
+            raise
         finally:
-            logger.debug(f"[{self.device_id}] Stopping notifications on {RESPONSE_CHAR_UUID}")
+            logger.debug(f"[{self.device_id}] {RESPONSE_CHAR_UUID} の通知を停止します")
             try:
                 if self.client.is_connected:
                     await self.client.stop_notify(RESPONSE_CHAR_UUID)
             except Exception as e:
-                logger.warning(f"[{self.device_id}] Failed to stop notifications: {e}")
+                logger.warning(f"[{self.device_id}] 通知の停止に失敗しました: {e}")
 
 
 def _parse_switchbot_adv_data(address, adv_data):

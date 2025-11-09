@@ -119,10 +119,17 @@ async def get_switchbot_adv_data(mac_address: str):
 
 def get_devices_from_db():
     """DBからポーリング対象のデバイス情報を取得する"""
-    conn = get_db_connection()
-    devices = conn.execute('SELECT device_id, device_name, mac_address, device_type FROM devices').fetchall()
-    conn.close()
-    return [dict(row) for row in devices]
+    conn = None
+    try:
+        conn = get_db_connection()
+        devices = conn.execute('SELECT device_id, device_name, mac_address, device_type FROM devices').fetchall()
+        return [dict(row) for row in devices]
+    except Exception as e:
+        logger.error(f"データベースからデバイス情報の取得に失敗しました: {e}", exc_info=True)
+        return []
+    finally:
+        if conn:
+            conn.close()
 
 def write_to_pipe(data):
     """取得したデータを一時ファイルにJSON Lines形式で追記する"""
@@ -160,25 +167,33 @@ async def process_commands(plant_connections):
                     if device_id not in plant_connections:
                         logger.warning(f"{device_id} の有効な接続がないため、閾値を設定できません。接続を試みます。")
                         # データベースからこのデバイスのMACアドレスを再取得
-                        conn = get_db_connection()
-                        dev_info = conn.execute("SELECT mac_address FROM devices WHERE device_id = ?", (device_id,)).fetchone()
-                        conn.close()
-                        if dev_info:
-                             plant_connections[device_id] = PlantDeviceBLE(dev_info['mac_address'], device_id)
-                        else:
-                             logger.error(f"コマンド実行のためにデバイス {device_id} がデータベースに見つかりません。")
-                             continue
+                        conn = None
+                        try:
+                            conn = get_db_connection()
+                            dev_info = conn.execute("SELECT mac_address FROM devices WHERE device_id = ?", (device_id,)).fetchone()
+                            if dev_info:
+                                plant_connections[device_id] = PlantDeviceBLE(dev_info['mac_address'], device_id)
+                            else:
+                                logger.error(f"コマンド実行のためにデバイス {device_id} がデータベースに見つかりません。")
+                                continue
+                        except Exception as e:
+                            logger.error(f"デバイス情報の取得中にエラーが発生しました: {e}", exc_info=True)
+                            continue
+                        finally:
+                            if conn:
+                                conn.close()
                     
                     ble_device = plant_connections[device_id]
                     dry_mv = payload.get('dry_threshold')
                     wet_mv = payload.get('wet_threshold')
-                    
+
                     if dry_mv is not None and wet_mv is not None:
-                        success = await ble_device.set_watering_thresholds(dry_mv, wet_mv)
-                        if success:
-                            logger.info(f"{device_id} に閾値を正常に送信しました。")
-                        else:
-                            logger.error(f"{device_id} への閾値の送信に失敗しました。")
+                        try:
+                            success = await ble_device.set_watering_thresholds(dry_mv, wet_mv)
+                            if success:
+                                logger.info(f"{device_id} に閾値を正常に送信しました。")
+                        except Exception as e:
+                            logger.error(f"{device_id} への閾値の送信に失敗しました: {e}")
                     else:
                         logger.error(f"set_watering_thresholds のペイロードが無効です: {payload}")
 
@@ -192,61 +207,116 @@ async def main_loop():
     """Bluetoothデバイスのポーリングとコマンド処理を行うメインループ"""
     logger.info("Bluetoothデーモンループを開始します...")
     plant_sensor_connections = {}
+    iteration = 0
+    last_heartbeat_time = datetime.now()
+    heartbeat_interval = 300  # 5分ごとにハートビートログを出力
+
+    # エラー統計
+    error_count = 0
+    success_count = 0
+    db_error_count = 0
+    ble_error_count = 0
 
     while True:
-        # コマンド処理をループの最初に追加
-        await process_commands(plant_sensor_connections)
+        try:
+            iteration += 1
+            current_time = datetime.now()
 
-        devices_to_poll = get_devices_from_db()
-        
-        if not devices_to_poll:
-            logger.info("データベースに設定済みのデバイスがありません。待機します...")
-            await asyncio.sleep(config.DATA_FETCH_INTERVAL)
-            continue
-        
-        logger.info(f"{len(devices_to_poll)} 個のデバイスのデータ収集サイクルを開始します。")
-        
-        for device in devices_to_poll:
-            dev_id = device.get('device_id')
-            device_type = device.get('device_type')
-            mac_address = device.get('mac_address')
-            sensor_data = None
+            # 詳細なハートビートログ（5分ごと）
+            if (current_time - last_heartbeat_time).total_seconds() >= heartbeat_interval:
+                total_operations = success_count + error_count
+                success_rate = (success_count / total_operations * 100) if total_operations > 0 else 0
+                logger.info(
+                    f"=== ハートビート === "
+                    f"イテレーション: {iteration}, "
+                    f"アクティブ接続: {len(plant_sensor_connections)}, "
+                    f"成功/エラー: {success_count}/{error_count} ({success_rate:.1f}%), "
+                    f"DB/BLEエラー: {db_error_count}/{ble_error_count}, "
+                    f"稼働時間: {current_time.strftime('%Y-%m-%d %H:%M:%S')}"
+                )
+                last_heartbeat_time = current_time
 
-            logger.info(f"device info: {device}")
-            logger.info(f"Polling device: {device.get('device_name')} ({dev_id}) of type {device_type} at {mac_address}")
-            logger.info(f"デバイスをポーリング中: {device.get('device_name')} ({dev_id})")
+            logger.debug(f"ループイテレーション {iteration} 開始 - アクティブ接続数: {len(plant_sensor_connections)}")
+
+            # コマンド処理をループの最初に追加
+            await process_commands(plant_sensor_connections)
 
             try:
-                if device_type == 'plant_sensor':
-                    if dev_id not in plant_sensor_connections:
-                        plant_sensor_connections[dev_id] = PlantDeviceBLE(mac_address, dev_id)
-                    ble_device = plant_sensor_connections[dev_id]
-                    sensor_data = await ble_device.get_sensor_data()
-                        
-                elif device_type and device_type.startswith('switchbot_'):
-                    sensor_data = await get_switchbot_adv_data(mac_address)
-                
-                # 取得結果をpipeファイルに書き出す
-                pipe_data = {
-                    "device_id": dev_id,
-                    "timestamp": datetime.now().isoformat(),
-                    "data": sensor_data # データがなくてもNoneとして記録
-                }
-                write_to_pipe(pipe_data)
-
+                devices_to_poll = get_devices_from_db()
             except Exception as e:
-                logger.error(f"{dev_id} のデータ収集中に未処理のエラーが発生しました: {e}", exc_info=True)
-                # エラー情報もpipeに書き出す
-                write_to_pipe({
-                    "device_id": dev_id,
-                    "timestamp": datetime.now().isoformat(),
-                    "error": str(e)
-                })
-            
-            await asyncio.sleep(2) # デバイス間のポーリングに短い遅延
+                db_error_count += 1
+                error_count += 1
+                logger.error(f"デバイス一覧の取得に失敗: {e}", exc_info=True)
+                await asyncio.sleep(10)
+                continue
 
-        logger.info(f"データ収集サイクルが終了しました。{config.DATA_FETCH_INTERVAL} 秒間待機します。")
-        await asyncio.sleep(config.DATA_FETCH_INTERVAL)
+            if not devices_to_poll:
+                logger.info("データベースに設定済みのデバイスがありません。待機します...")
+                await asyncio.sleep(config.DATA_FETCH_INTERVAL)
+                continue
+
+            logger.info(f"{len(devices_to_poll)} 個のデバイスのデータ収集サイクルを開始します。")
+
+            for device in devices_to_poll:
+                dev_id = device.get('device_id')
+                device_type = device.get('device_type')
+                mac_address = device.get('mac_address')
+                sensor_data = None
+
+                logger.info(f"device info: {device}")
+                logger.info(f"Polling device: {device.get('device_name')} ({dev_id}) of type {device_type} at {mac_address}")
+                logger.info(f"デバイスをポーリング中: {device.get('device_name')} ({dev_id})")
+
+                try:
+                    if device_type == 'plant_sensor':
+                        if dev_id not in plant_sensor_connections:
+                            plant_sensor_connections[dev_id] = PlantDeviceBLE(mac_address, dev_id)
+                        ble_device = plant_sensor_connections[dev_id]
+                        sensor_data = await ble_device.get_sensor_data()
+
+                    elif device_type and device_type.startswith('switchbot_'):
+                        sensor_data = await get_switchbot_adv_data(mac_address)
+
+                    # 取得結果をpipeファイルに書き出す
+                    pipe_data = {
+                        "device_id": dev_id,
+                        "timestamp": datetime.now().isoformat(),
+                        "data": sensor_data # データがなくてもNoneとして記録
+                    }
+                    write_to_pipe(pipe_data)
+
+                    # 成功カウント（データがNoneでも接続は成功とみなす）
+                    success_count += 1
+
+                except Exception as e:
+                    error_count += 1
+                    ble_error_count += 1
+                    logger.error(f"{dev_id} のデータ収集中に未処理のエラーが発生しました: {e}", exc_info=True)
+                    # エラー情報もpipeに書き出す
+                    write_to_pipe({
+                        "device_id": dev_id,
+                        "timestamp": datetime.now().isoformat(),
+                        "error": str(e)
+                    })
+
+                await asyncio.sleep(2) # デバイス間のポーリングに短い遅延
+
+            logger.info(f"データ収集サイクルが終了しました。{config.DATA_FETCH_INTERVAL} 秒間待機します。")
+            await asyncio.sleep(config.DATA_FETCH_INTERVAL)
+
+        except asyncio.CancelledError:
+            logger.info("メインループがキャンセルされました。終了します。")
+            raise
+        except KeyboardInterrupt:
+            logger.info("キーボード割り込みを受信しました。終了します。")
+            raise
+        except Exception as e:
+            error_count += 1
+            logger.error(f"メインループで予期しないエラーが発生しました: {e}", exc_info=True)
+            logger.warning(f"エラー統計 - 成功: {success_count}, エラー: {error_count}, DB: {db_error_count}, BLE: {ble_error_count}")
+            logger.info("10秒後にループを再開します...")
+            await asyncio.sleep(10)
+            continue
 
 if __name__ == "__main__":
     try:

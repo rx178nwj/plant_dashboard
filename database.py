@@ -8,9 +8,21 @@ from config import DATABASE_PATH
 logger = logging.getLogger(__name__)
 
 def get_db_connection():
+    """
+    データベース接続を取得する。
+    WALモードを有効にし、タイムアウトを設定して複数プロセスからの同時アクセスに対応。
+    """
     os.makedirs(os.path.dirname(DATABASE_PATH), exist_ok=True)
-    conn = sqlite3.connect(DATABASE_PATH)
+    conn = sqlite3.connect(DATABASE_PATH, timeout=30.0, check_same_thread=False)
     conn.row_factory = sqlite3.Row
+
+    # WALモードを有効化（複数プロセスからの同時読み書きを改善）
+    conn.execute("PRAGMA journal_mode=WAL")
+    # 同期モードを調整（パフォーマンスと安全性のバランス）
+    conn.execute("PRAGMA synchronous=NORMAL")
+    # Busy timeoutを設定（ロック時の待機時間）
+    conn.execute("PRAGMA busy_timeout=30000")
+
     return conn
 
 def migrate_db_schema(cursor):

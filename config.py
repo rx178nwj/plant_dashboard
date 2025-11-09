@@ -37,8 +37,17 @@ MAX_CONTENT_LENGTH = 16 * 1024 * 1024  # 16MB
 # --- BLE設定 ---
 # 注意: このUUIDはカスタムプラントセンサーに合わせてください
 TARGET_SERVICE_UUID = "6a3b2c1d-4e5f-6a7b-8c9d-e0f123456789"
-RECONNECT_ATTEMPTS = 5
+
+# 接続タイムアウト設定
+BLE_SCAN_TIMEOUT = 10.0  # デバイススキャンのタイムアウト(秒)
+BLE_CONNECT_TIMEOUT = 15.0  # 接続のタイムアウト(秒)
+BLE_OPERATION_TIMEOUT = 20.0  # センサーデータ取得/コマンド送信のタイムアウト(秒)
+
+# リトライ設定
+RECONNECT_ATTEMPTS = 5  # 再接続試行回数
 RECONNECT_DELAY_BASE = 2.0  # 秒単位、指数関数的に増加 (2, 4, 8...)
+BLE_OPERATION_RETRY_ATTEMPTS = 3  # センサーデータ取得/コマンド送信のリトライ回数
+BLE_OPERATION_RETRY_DELAY = 2.0  # リトライ間の待機時間(秒)
 
 # --- デーモン設定 ---
 # データ取得間隔(秒)。バッテリー消費を考慮し、5分(300秒)を推奨
