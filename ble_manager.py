@@ -372,17 +372,26 @@ async def scan_devices():
         for address, (device, adv_data) in devices.items():
             # AdvertisementData.rssi を使用 (BLEDevice.rssi は非推奨)
             rssi = adv_data.rssi
-            logger.info(f"Discovered device: {device.name} ({device.address}), RSSI: {rssi} dBm")
-            if PLANT_SERVICE_UUID in adv_data.service_uuids:
-                # PlantMonitor_xx_yyyy 形式のデバイス名のみを受け入れる
-                # 例: PlantMonitor_20_3EC6
-                device_name = device.name or ''
-                if device_name.startswith('PlantMonitor_'):
-                    found_devices.append({'address': device.address, 'name': device_name, 'type': 'plant_sensor', 'rssi': rssi})
-                    logger.info(f"Found PlantMonitor device: {device_name} at {device.address}")
+            device_name = device.name or ''
+
+            logger.debug(f"Discovered device: {device_name} ({device.address}), RSSI: {rssi} dBm, UUIDs: {adv_data.service_uuids}")
+
+            # PlantMonitor_xx_yyyy 形式のデバイス名をチェック
+            if device_name.startswith('PlantMonitor_'):
+                # デバイス名が一致する場合は、UUIDの有無に関わらず追加
+                if PLANT_SERVICE_UUID in adv_data.service_uuids:
+                    logger.info(f"Found PlantMonitor device with UUID: {device_name} at {device.address}")
                 else:
-                    logger.debug(f"Ignoring plant sensor with non-matching name: {device_name} at {device.address}")
+                    logger.info(f"Found PlantMonitor device (no UUID advertised): {device_name} at {device.address}")
+                found_devices.append({'address': device.address, 'name': device_name, 'type': 'plant_sensor', 'rssi': rssi})
                 continue
+
+            # PLANT_SERVICE_UUIDを持つデバイスをチェック（名前が一致しない場合）
+            if PLANT_SERVICE_UUID in adv_data.service_uuids:
+                logger.debug(f"Device has PLANT_SERVICE_UUID but name doesn't match PlantMonitor_ pattern: {device_name} at {device.address}")
+                continue
+
+            # SwitchBotデバイスをチェック
             switchbot_info = _parse_switchbot_adv_data(address, adv_data)
             if switchbot_info:
                 device_name_map = {'switchbot_meter': 'SwitchBot Meter', 'switchbot_meter_plus': 'SwitchBot Meter Plus', 'switchbot_co2_meter': 'SwitchBot CO2 Meter'}
