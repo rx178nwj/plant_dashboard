@@ -370,12 +370,15 @@ async def scan_devices():
     try:
         devices = await BleakScanner.discover(timeout=10.0, return_adv=True)
         for address, (device, adv_data) in devices.items():
+            # AdvertisementData.rssi を使用 (BLEDevice.rssi は非推奨)
+            rssi = adv_data.rssi
+            logger.info(f"Discovered device: {device.name} ({device.address}), RSSI: {rssi} dBm")
             if PLANT_SERVICE_UUID in adv_data.service_uuids:
                 # PlantMonitor_xx_yyyy 形式のデバイス名のみを受け入れる
                 # 例: PlantMonitor_20_3EC6
                 device_name = device.name or ''
                 if device_name.startswith('PlantMonitor_'):
-                    found_devices.append({'address': device.address, 'name': device_name, 'type': 'plant_sensor', 'rssi': device.rssi})
+                    found_devices.append({'address': device.address, 'name': device_name, 'type': 'plant_sensor', 'rssi': rssi})
                     logger.info(f"Found PlantMonitor device: {device_name} at {device.address}")
                 else:
                     logger.debug(f"Ignoring plant sensor with non-matching name: {device_name} at {device.address}")
@@ -383,7 +386,7 @@ async def scan_devices():
             switchbot_info = _parse_switchbot_adv_data(address, adv_data)
             if switchbot_info:
                 device_name_map = {'switchbot_meter': 'SwitchBot Meter', 'switchbot_meter_plus': 'SwitchBot Meter Plus', 'switchbot_co2_meter': 'SwitchBot CO2 Meter'}
-                found_devices.append({'address': device.address, 'name': device.name or device_name_map.get(switchbot_info['type'], 'Unknown SwitchBot'), 'type': switchbot_info['type'], 'rssi': device.rssi, 'data': switchbot_info.get('data')})
+                found_devices.append({'address': device.address, 'name': device.name or device_name_map.get(switchbot_info['type'], 'Unknown SwitchBot'), 'type': switchbot_info['type'], 'rssi': rssi, 'data': switchbot_info.get('data')})
     except BleakError as e:
         logger.error(f"Error while scanning: {e}")
     return found_devices
