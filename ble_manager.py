@@ -371,7 +371,14 @@ async def scan_devices():
         devices = await BleakScanner.discover(timeout=10.0, return_adv=True)
         for address, (device, adv_data) in devices.items():
             if PLANT_SERVICE_UUID in adv_data.service_uuids:
-                found_devices.append({'address': device.address, 'name': device.name or 'Unknown Plant Sensor', 'type': 'plant_sensor', 'rssi': device.rssi})
+                # PlantMonitor_xx_yyyy 形式のデバイス名のみを受け入れる
+                # 例: PlantMonitor_20_3EC6
+                device_name = device.name or ''
+                if device_name.startswith('PlantMonitor_'):
+                    found_devices.append({'address': device.address, 'name': device_name, 'type': 'plant_sensor', 'rssi': device.rssi})
+                    logger.info(f"Found PlantMonitor device: {device_name} at {device.address}")
+                else:
+                    logger.debug(f"Ignoring plant sensor with non-matching name: {device_name} at {device.address}")
                 continue
             switchbot_info = _parse_switchbot_adv_data(address, adv_data)
             if switchbot_info:
