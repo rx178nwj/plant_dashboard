@@ -24,6 +24,8 @@ CMD_SET_WATERING_THRESHOLDS = 0x02
 
 # Ensure log directory exists
 config.LOG_FILE_PATH = "/var/log/plant_dashboard/bluetooth_manager.log"
+#config.DEBUG = True
+
 log_dir = Path(config.LOG_FILE_PATH).parent
 log_dir.mkdir(parents=True, exist_ok=True)
 
@@ -78,6 +80,129 @@ def retry_on_failure(max_attempts=None, delay=None, exceptions=(BleakError, asyn
             return None
         return wrapper
     return decorator
+
+def _parse_tm_data_t(data, offset):
+    """tm_data_t構造体をパース (36バイト)"""
+    tm_format = "<9i"  # 9個のint (tm_sec, tm_min, tm_hour, tm_mday, tm_mon, tm_year, tm_wday, tm_yday, tm_isdst)
+    tm_size = struct.calcsize(tm_format)
+    tm_values = struct.unpack_from(tm_format, data, offset)
+
+    tm_dict = {
+        'tm_sec': tm_values[0],
+        'tm_min': tm_values[1],
+        'tm_hour': tm_values[2],
+        'tm_mday': tm_values[3],
+        'tm_mon': tm_values[4],
+        'tm_year': tm_values[5],
+        'tm_wday': tm_values[6],
+        'tm_yday': tm_values[7],
+        'tm_isdst': tm_values[8],
+    }
+
+    return tm_dict, offset + tm_size
+
+
+def _parse_sensor_data_v2(payload, device_id):
+    """
+    data_version 2 のセンサーデータをパースする (PlantMonitor_30用)
+
+    Args:
+        payload: 79または84バイトのペイロードデータ
+        device_id: ログ出力用のデバイスID
+
+    Returns:
+        dict: センサーデータ辞書
+
+    Raises:
+        struct.error: データ解析エラー
+    """
+    # data_version (1バイト) + struct tm (36バイト) + センサーデータ
+    # 実デバイスから: 84バイト (79バイト + 5バイトパディング?)
+
+    if len(payload) < 70:
+        raise struct.error(f"ペイロードが短すぎます: {len(payload)} バイト (期待: 79以上)")
+
+    # デバッグ: ペイロード全体を16進数で出力
+    logger.debug(f"[{device_id}] ペイロード長: {len(payload)} バイト")
+    logger.debug(f"[{device_id}] ペイロード(hex): {payload[:84].hex() if len(payload) >= 84 else payload.hex()}")
+
+    # バイナリダンプ表示
+    print("📄 バイナリダンプ:")
+    for i in range(0, len(payload), 16):
+        hex_part = ' '.join(f'{b:02x}' for b in payload[i:i+16])
+        ascii_part = ''.join(chr(b) if 32 <= b < 127 else '.' for b in payload[i:i+16])
+        print(f"   {i:04x}: {hex_part:<48} {ascii_part}")
+    print()
+    
+    offset = 0
+    # data_version (uint8_t) - 1バイト
+    data_version = struct.unpack_from("<B", payload, offset)[0]
+    print(f"   offset {hex(offset)}: data_version = {data_version}")
+    offset += 1
+
+    # 構造体アライメントのため3バイトのパディングがある
+    offset += 3
+
+    # datetime (tm_data_t - 36バイト = 9 x 4バイトint)
+    datetime_dict, offset = _parse_tm_data_t(payload, offset)
+    print(f"   offset after tm_data_t: {hex(offset)}")
+
+    # センサーデータ (4 floats = 16バイト)
+    lux, temperature, humidity, soil_moisture = struct.unpack_from("<4f", payload, offset)
+    print(f"   offset {hex(offset)}: lux={lux}, temp={temperature}, hum={humidity}, soil_moist={soil_moisture}")
+    offset += 16
+
+    sensor_error = struct.unpack_from("<B", payload, offset)[0]
+    print(f"   offset {hex(offset)}: sensor_error = {sensor_error}")
+    offset += 4 # センサーエラーの後に3バイトのパディングがある
+
+    # 土壌温度 (2 floats = 8バイト)
+    soil_temperature1, soil_temperature2 = struct.unpack_from("<2f", payload, offset)
+    print(f"   offset {hex(offset)}: soil_temp1={soil_temperature1}, soil_temp2={soil_temperature2}")
+    offset += 8  # 2 floats (8バイト) + 3バイトパディング
+
+    # FDC1004静電容量データ (4 floats = 16バイト)
+    fdc1004_format = f"<{config.FDC1004_CHANNEL_COUNT}f"
+    soil_moisture_capacitance = struct.unpack_from(fdc1004_format, payload, offset)
+    print(f"   offset {hex(offset)}: capacitance={soil_moisture_capacitance}")
+    offset += 4 * config.FDC1004_CHANNEL_COUNT
+
+    print(f"   final offset: {hex(offset)} / {len(payload)}")
+    # datetimeオブジェクト作成
+    try:
+        dt = datetime(datetime_dict['tm_year'] + 1900, datetime_dict['tm_mon'] + 1, datetime_dict['tm_mday'], datetime_dict['tm_hour'], datetime_dict['tm_min'], datetime_dict['tm_sec'])
+        dt_str = dt.strftime("%Y-%m-%d %H:%M:%S")
+    except (ValueError, OverflowError) as e:
+        logger.warning(f"[{device_id}] 無効な日時データ: {e}. デフォルト値を使用します")
+        dt_str = "1970-01-01 00:00:00"
+
+    logger.info(f"[{device_id}] Parsed datetime: {dt_str}")
+
+    sensor_data = {
+        'data_version': data_version,
+        'datetime': dt_str,
+        'light_lux': lux,
+        'temperature': temperature,
+        'humidity': humidity,
+        'soil_moisture': soil_moisture,
+        'sensor_error': False,
+        'soil_temperature1': soil_temperature1,
+        'soil_temperature2': soil_temperature2,
+        'capacitance_ch1': soil_moisture_capacitance[0],
+        'capacitance_ch2': soil_moisture_capacitance[1],
+        'capacitance_ch3': soil_moisture_capacitance[2],
+        'capacitance_ch4': soil_moisture_capacitance[3],
+        'battery_level': None
+    }
+
+    logger.info(
+        f"[{device_id}] v2データ解析完了: "
+        f"temp={temperature:.1f}°C, humidity={humidity:.1f}%, "
+        f"soil_temp1={soil_temperature1:.1f}°C, soil_temp2={soil_temperature2:.1f}°C, "
+        f"cap=[{soil_moisture_capacitance[0]:.1f}, {soil_moisture_capacitance[1]:.1f}, {soil_moisture_capacitance[2]:.1f}, {soil_moisture_capacitance[3]:.1f}]pF"
+    )
+
+    return sensor_data
 
 class PlantDeviceBLE:
     """
@@ -262,6 +387,7 @@ class PlantDeviceBLE:
                 logger.error(f"[{self.device_id}] ペイロード長の不一致。ヘッダー: {data_len}, 実際: {len(payload)}")
                 raise BleakError(f"ペイロード長の不一致: 期待 {data_len}, 実際 {len(payload)}")
 
+            # v1デバイス処理 (既存コード - 変更なし)
             if data_len == 56:
                 unpacked_data = struct.unpack('<9i4f?3x', payload)
 
@@ -271,18 +397,29 @@ class PlantDeviceBLE:
                 dt = datetime(tm_year + 1900, tm_mon + 1, tm_mday, tm_hour, tm_min, tm_sec)
                 dt_str = dt.strftime("%Y-%m-%d %H:%M:%S")
 
+                sensor_data = {
+                    'datetime': dt_str, 'light_lux': lux, 'temperature': temp,
+                    'humidity': humidity, 'soil_moisture': soil, 'sensor_error': error,
+                    'battery_level': None
+                }
+
+                logger.info(f"[{self.device_id}] v1センサーデータの解析に成功: {sensor_data}")
+                return sensor_data
+
+            # v2デバイス処理 (PlantMonitor_30用 - 新規追加)
+            elif data_len > 70:
+                logger.info(f"[{self.device_id}] data_version 2 形式のデータを検出しました ({data_len}バイト)")
+                try:
+                    sensor_data = _parse_sensor_data_v2(payload, self.device_id)
+                    logger.info(f"[{self.device_id}] v2センサーデータの解析に成功")
+                    return sensor_data
+                except struct.error as e:
+                    logger.error(f"[{self.device_id}] v2データの解析に失敗: {e}")
+                    raise BleakError(f"v2データ解析エラー: {e}")
+
             else:
                 logger.error(f"[{self.device_id}] サポートされていないペイロード長: {data_len}")
                 raise BleakError(f"サポートされていないペイロード長: {data_len}")
-
-            sensor_data = {
-                'datetime': dt_str, 'light_lux': lux, 'temperature': temp,
-                'humidity': humidity, 'soil_moisture': soil, 'sensor_error': error,
-                'battery_level': None
-            }
-
-            logger.info(f"[{self.device_id}] センサーデータの解析に成功: {sensor_data}")
-            return sensor_data
 
         except asyncio.TimeoutError as e:
             logger.error(
