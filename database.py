@@ -61,6 +61,28 @@ def migrate_db_schema(cursor):
         except sqlite3.OperationalError as e:
             logger.error(f"Failed to add column 'watering_status' to 'daily_plant_analysis' table: {e}")
 
+    # --- Migrate sensor_data table for v2 device support (PlantMonitor_30) ---
+    cursor.execute("PRAGMA table_info(sensor_data)")
+    sensor_columns = [row['name'] for row in cursor.fetchall()]
+
+    sensor_new_columns = {
+        'soil_temperature1': 'REAL',
+        'soil_temperature2': 'REAL',
+        'capacitance_ch1': 'REAL',
+        'capacitance_ch2': 'REAL',
+        'capacitance_ch3': 'REAL',
+        'capacitance_ch4': 'REAL',
+        'data_version': 'INTEGER'
+    }
+
+    for col_name, col_type in sensor_new_columns.items():
+        if col_name not in sensor_columns:
+            try:
+                cursor.execute(f"ALTER TABLE sensor_data ADD COLUMN {col_name} {col_type}")
+                logger.info(f"Added column '{col_name}' to 'sensor_data' table.")
+            except sqlite3.OperationalError as e:
+                logger.error(f"Failed to add column '{col_name}' to 'sensor_data' table: {e}")
+
 
 def init_db():
     conn = get_db_connection()

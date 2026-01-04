@@ -44,8 +44,8 @@ BLE_CONNECT_TIMEOUT = 15.0  # 接続のタイムアウト(秒)
 BLE_OPERATION_TIMEOUT = 20.0  # センサーデータ取得/コマンド送信のタイムアウト(秒)
 
 # リトライ設定
-RECONNECT_ATTEMPTS = 5  # 再接続試行回数
-RECONNECT_DELAY_BASE = 2.0  # 秒単位、指数関数的に増加 (2, 4, 8...)
+RECONNECT_ATTEMPTS = 2  # 再接続試行回数
+RECONNECT_DELAY_BASE = 3.0  # 秒単位、指数関数的に増加 (2, 4, 8...)
 BLE_OPERATION_RETRY_ATTEMPTS = 3  # センサーデータ取得/コマンド送信のリトライ回数
 BLE_OPERATION_RETRY_DELAY = 2.0  # リトライ間の待機時間(秒)
 
@@ -56,3 +56,5 @@ DATA_FETCH_INTERVAL = 60
 PLANT_ANALYZER_INTERVAL = 3600 # 1時間
 # Webアプリからデーモンへのコマンド連携用パイプ
 COMMAND_PIPE_PATH = "/tmp/plant_dashboard_cmd_pipe.jsonl"
+
+FDC1004_CHANNEL_COUNT = 4  # FDC1004は4チャネルまで対応
