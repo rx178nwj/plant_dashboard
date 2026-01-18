@@ -182,28 +182,42 @@ function updatePlantCards(plants) {
         updateElementText(`temp-${plantId}`, sensorData.temperature?.toFixed(1) || '--');
         updateElementText(`humidity-${plantId}`, sensorData.humidity?.toFixed(1) || '--');
         updateElementText(`light-${plantId}`, sensorData.light_lux?.toFixed(1) || '--');
-        updateElementText(`soil-${plantId}`, sensorData.soil_moisture || '--');
+        updateElementText(`soil-${plantId}`, sensorData.soil_moisture?.toFixed(2) || '--');
 
-        // Update analysis text
-        const growthText = (analysis.growth_period || 'Unknown').replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-        updateElementText(`growth-${plantId}`, growthText);
-        updateElementText(`watering-${plantId}`, analysis.watering_advice || 'N/A');
-        
-        // Update watering advice visual cue based on watering_status
-        const wateringAdviceEl = document.getElementById(`watering-${plantId}`);
-        if (wateringAdviceEl) {
-            const parentBadge = wateringAdviceEl.closest('.badge');
-            if (parentBadge) {
-                parentBadge.classList.remove('bg-primary', 'text-white', 'bg-light', 'text-dark');
-                const icon = parentBadge.querySelector('i');
-                
-                if (analysis.watering_status === 'needed') {
-                    parentBadge.classList.add('bg-primary', 'text-white');
-                    if (icon) icon.className = 'bi bi-exclamation-triangle-fill me-1';
-                } else {
-                     parentBadge.classList.add('bg-light', 'text-dark');
-                     if (icon) icon.className = 'bi bi-water';
-                }
+        // Update soil temperature values if available
+        if (sensorData.soil_temperature1 != null) {
+            updateElementText(`soil-temp1-${plantId}`, sensorData.soil_temperature1.toFixed(1));
+        }
+        if (sensorData.soil_temperature2 != null) {
+            updateElementText(`soil-temp2-${plantId}`, sensorData.soil_temperature2.toFixed(1));
+        }
+
+        // Update analysis icon based on growth period and survival status
+        const analysisEl = document.getElementById(`analysis-${plantId}`);
+        if (analysisEl) {
+            const growth = analysis.growth_period || 'unknown';
+            const survival = analysis.survival_limit_status || 'safe';
+
+            const iconMap = {
+                'lethal_high': { file: 'LethalHighTemp.svg', title: 'Lethal High Temp', textClass: 'text-danger' },
+                'lethal_low': { file: 'LethalLowTemp.svg', title: 'Lethal Low Temp', textClass: 'text-info' },
+                'fast_growth': { file: 'FastGrowth.svg', title: 'Fast Growth', textClass: 'text-success' },
+                'slow_growth': { file: 'SlowGrowth.svg', title: 'Slow Growth', textClass: 'text-secondary' },
+                'hot_dormancy': { file: 'HotDormancy.svg', title: 'Hot Dormancy', textClass: 'text-warning' },
+                'cold_dormancy': { file: 'ColdDormancy.svg', title: 'Cold Dormancy', textClass: 'text-primary' }
+            };
+
+            let iconInfo = null;
+            if (survival === 'lethal_high' || survival === 'lethal_low') {
+                iconInfo = iconMap[survival];
+            } else if (iconMap[growth]) {
+                iconInfo = iconMap[growth];
+            }
+
+            if (iconInfo) {
+                analysisEl.innerHTML = `<img src="/static/icons/${iconInfo.file}" alt="${iconInfo.title}" title="${iconInfo.title}" style="height: 43px;"><span class="ms-2 small fw-bold ${iconInfo.textClass}">${iconInfo.title}</span>`;
+            } else {
+                analysisEl.innerHTML = `<span class="badge bg-light text-muted" title="Unknown"><i class="bi bi-question-circle fs-5"></i></span><span class="ms-2 small text-muted">Unknown</span>`;
             }
         }
     });

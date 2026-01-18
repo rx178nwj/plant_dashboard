@@ -65,7 +65,8 @@ def get_plant_centric_data(selected_date_str):
         # 土壌センサーが割り当てられている場合、それを最優先
         if plant_data['assigned_plant_sensor_id']:
             sensor_data = conn.execute("""
-                SELECT s.temperature, s.humidity, s.light_lux, s.soil_moisture, d.battery_level, s.timestamp
+                SELECT s.temperature, s.humidity, s.light_lux, s.soil_moisture,
+                       s.soil_temperature1, s.soil_temperature2, d.battery_level, s.timestamp
                 FROM sensor_data s JOIN devices d ON s.device_id = d.device_id
                 WHERE s.device_id = ? AND s.timestamp <= ?
                 ORDER BY s.timestamp DESC LIMIT 1
@@ -130,7 +131,7 @@ def dashboard():
         
         # 最新のセンサーデータを取得
         sensor_data = conn.execute("""
-            SELECT temperature, humidity, light_lux, soil_moisture
+            SELECT temperature, humidity, light_lux, soil_moisture, soil_temperature1, soil_temperature2
             FROM sensor_data
             WHERE device_id = (SELECT assigned_plant_sensor_id FROM managed_plants WHERE managed_plant_id = ?)
             ORDER BY timestamp DESC
@@ -249,7 +250,8 @@ def api_history(device_id):
 
     if period == '24h':
         query = """
-            SELECT timestamp, temperature, humidity, light_lux, soil_moisture
+            SELECT timestamp, temperature, humidity, light_lux, soil_moisture,
+                   soil_temperature1, soil_temperature2
             FROM sensor_data
             WHERE device_id = ? AND date(timestamp) = ?
             ORDER BY timestamp ASC
@@ -287,7 +289,13 @@ def api_history(device_id):
                 MIN(light_lux) as light_lux_min,
                 AVG(soil_moisture) as soil_moisture,
                 MAX(soil_moisture) as soil_moisture_max,
-                MIN(soil_moisture) as soil_moisture_min
+                MIN(soil_moisture) as soil_moisture_min,
+                AVG(soil_temperature1) as soil_temperature1,
+                MAX(soil_temperature1) as soil_temperature1_max,
+                MIN(soil_temperature1) as soil_temperature1_min,
+                AVG(soil_temperature2) as soil_temperature2,
+                MAX(soil_temperature2) as soil_temperature2_max,
+                MIN(soil_temperature2) as soil_temperature2_min
             FROM sensor_data
             WHERE device_id = ? AND timestamp BETWEEN datetime(?, {time_modifier}) AND ?
             {group_by_clause}
@@ -350,7 +358,9 @@ def api_plant_analysis_history(managed_plant_id):
             daily_temp_max, daily_temp_min, daily_temp_ave,
             daily_humidity_max, daily_humidity_min, daily_humidity_ave,
             daily_light_max, daily_light_min, daily_light_ave,
-            daily_soil_moisture_max, daily_soil_moisture_min, daily_soil_moisture_ave
+            daily_soil_moisture_max, daily_soil_moisture_min, daily_soil_moisture_ave,
+            daily_soil_temp1_max, daily_soil_temp1_min, daily_soil_temp1_ave,
+            daily_soil_temp2_max, daily_soil_temp2_min, daily_soil_temp2_ave
         FROM daily_plant_analysis
         WHERE managed_plant_id = ? AND analysis_date BETWEEN ? AND ?
         ORDER BY analysis_date ASC

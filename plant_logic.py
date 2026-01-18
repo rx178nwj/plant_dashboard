@@ -68,9 +68,11 @@ class PlantStateAnalyzer:
         soil_sensor_id = self.plant.get('assigned_plant_sensor_id')
         if soil_sensor_id:
             soil_agg_query = """
-                SELECT 
+                SELECT
                     MAX(light_lux) as daily_light_max, MIN(light_lux) as daily_light_min, AVG(light_lux) as daily_light_ave,
-                    MAX(soil_moisture) as daily_soil_moisture_max, MIN(soil_moisture) as daily_soil_moisture_min, AVG(soil_moisture) as daily_soil_moisture_ave
+                    MAX(soil_moisture) as daily_soil_moisture_max, MIN(soil_moisture) as daily_soil_moisture_min, AVG(soil_moisture) as daily_soil_moisture_ave,
+                    MAX(soil_temperature1) as daily_soil_temp1_max, MIN(soil_temperature1) as daily_soil_temp1_min, AVG(soil_temperature1) as daily_soil_temp1_ave,
+                    MAX(soil_temperature2) as daily_soil_temp2_max, MIN(soil_temperature2) as daily_soil_temp2_min, AVG(soil_temperature2) as daily_soil_temp2_ave
                 FROM sensor_data WHERE device_id = ? AND timestamp BETWEEN ? AND ?
             """
             soil_summary = self.conn.execute(soil_agg_query, (soil_sensor_id, start_of_day, end_of_day)).fetchone()
@@ -122,14 +124,18 @@ class PlantStateAnalyzer:
                 managed_plant_id, analysis_date, daily_temp_max, daily_temp_min, daily_temp_ave,
                 daily_humidity_max, daily_humidity_min, daily_humidity_ave, daily_light_max, daily_light_min,
                 daily_light_ave, daily_soil_moisture_max, daily_soil_moisture_min, daily_soil_moisture_ave,
+                daily_soil_temp1_max, daily_soil_temp1_min, daily_soil_temp1_ave,
+                daily_soil_temp2_max, daily_soil_temp2_min, daily_soil_temp2_ave,
                 daily_watering_events, growth_period, survival_limit_status, watering_advice, watering_status, analysis_log
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(managed_plant_id, analysis_date) DO UPDATE SET
                 daily_temp_max=excluded.daily_temp_max, daily_temp_min=excluded.daily_temp_min, daily_temp_ave=excluded.daily_temp_ave,
                 daily_humidity_max=excluded.daily_humidity_max, daily_humidity_min=excluded.daily_humidity_min, daily_humidity_ave=excluded.daily_humidity_ave,
                 daily_light_max=excluded.daily_light_max, daily_light_min=excluded.daily_light_min, daily_light_ave=excluded.daily_light_ave,
                 daily_soil_moisture_max=excluded.daily_soil_moisture_max, daily_soil_moisture_min=excluded.daily_soil_moisture_min, daily_soil_moisture_ave=excluded.daily_soil_moisture_ave,
-                daily_watering_events=excluded.daily_watering_events, growth_period=excluded.growth_period, 
+                daily_soil_temp1_max=excluded.daily_soil_temp1_max, daily_soil_temp1_min=excluded.daily_soil_temp1_min, daily_soil_temp1_ave=excluded.daily_soil_temp1_ave,
+                daily_soil_temp2_max=excluded.daily_soil_temp2_max, daily_soil_temp2_min=excluded.daily_soil_temp2_min, daily_soil_temp2_ave=excluded.daily_soil_temp2_ave,
+                daily_watering_events=excluded.daily_watering_events, growth_period=excluded.growth_period,
                 survival_limit_status=excluded.survival_limit_status, watering_advice=excluded.watering_advice,
                 watering_status=excluded.watering_status, analysis_log=excluded.analysis_log
         """, (
@@ -138,6 +144,8 @@ class PlantStateAnalyzer:
             sensor_summary.get('daily_humidity_max'), sensor_summary.get('daily_humidity_min'), sensor_summary.get('daily_humidity_ave'),
             sensor_summary.get('daily_light_max'), sensor_summary.get('daily_light_min'), sensor_summary.get('daily_light_ave'),
             sensor_summary.get('daily_soil_moisture_max'), sensor_summary.get('daily_soil_moisture_min'), sensor_summary.get('daily_soil_moisture_ave'),
+            sensor_summary.get('daily_soil_temp1_max'), sensor_summary.get('daily_soil_temp1_min'), sensor_summary.get('daily_soil_temp1_ave'),
+            sensor_summary.get('daily_soil_temp2_max'), sensor_summary.get('daily_soil_temp2_min'), sensor_summary.get('daily_soil_temp2_ave'),
             sensor_summary.get('daily_watering_events', 0),
             new_growth_period, new_survival_status, new_watering_advice, new_watering_status, json.dumps(final_log)
         ))

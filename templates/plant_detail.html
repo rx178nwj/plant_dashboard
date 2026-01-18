@@ -37,27 +37,59 @@
                             <span class="fs-5 fw-bold">{{ sensor_data.humidity | round(1) if sensor_data and 'humidity' in sensor_data and sensor_data.humidity is not none else '--' }}</span> %
                         </div>
                         {% if plant.sensors.source == 'soil_sensor' %}
-                        <div class="col-6">
+                        <div class="col-6 mb-3">
                             <i class="bi bi-brightness-high text-warning"></i> Light<br>
                             <span class="fs-5 fw-bold">{{ sensor_data.light_lux | round(1) if sensor_data and 'light_lux' in sensor_data and sensor_data.light_lux is not none else '--' }}</span> lx
                         </div>
-                        <div class="col-6">
+                        <div class="col-6 mb-3">
                             <i class="bi bi-moisture text-success"></i> Soil Moisture<br>
-                            <span class="fs-5 fw-bold">{{ sensor_data.soil_moisture if sensor_data and 'soil_moisture' in sensor_data and sensor_data.soil_moisture is not none else '--' }}</span>
+                            <span class="fs-5 fw-bold">{{ sensor_data.soil_moisture | round(2) if sensor_data and 'soil_moisture' in sensor_data and sensor_data.soil_moisture is not none else '--' }}</span>
                         </div>
+                        {% if sensor_data.soil_temperature1 is not none %}
+                        <div class="col-6">
+                            <i class="bi bi-thermometer text-info"></i> Soil Temp1<br>
+                            <span class="fs-5 fw-bold">{{ sensor_data.soil_temperature1 | round(1) }}</span> °C
+                        </div>
+                        {% endif %}
+                        {% if sensor_data.soil_temperature2 is not none %}
+                        <div class="col-6">
+                            <i class="bi bi-thermometer text-info"></i> Soil Temp2<br>
+                            <span class="fs-5 fw-bold">{{ sensor_data.soil_temperature2 | round(1) }}</span> °C
+                        </div>
+                        {% endif %}
                         {% endif %}
                     </div>
                 </div>
                 <div class="card-footer">
                      <h6 class="card-subtitle mb-2 text-muted small"><i class="bi bi-clipboard-data"></i> Latest Analysis</h6>
-                     <span class="badge bg-light text-dark me-2">
-                         <i class="bi bi-sun"></i> Growth:
-                         <strong>{{ plant.analysis.growth_period | replace('_', ' ') | title | default('Unknown') }}</strong>
-                     </span>
-                     <span class="badge {% if plant.analysis.watering_advice and 'needed' in plant.analysis.watering_advice|lower %}bg-primary text-white{% else %}bg-light text-dark{% endif %}">
-                         <i class="bi bi-water"></i> Watering:
-                         <strong>{{ plant.analysis.watering_advice | default('N/A') }}</strong>
-                     </span>
+                     <div class="d-flex align-items-center">
+                         {% set growth = plant.analysis.growth_period %}
+                         {% set survival = plant.analysis.survival_limit_status %}
+                         {% if survival == 'lethal_high' %}
+                         <img src="{{ url_for('static', filename='icons/LethalHighTemp.svg') }}" alt="Lethal High Temperature" title="Lethal High Temperature" style="height: 32px;">
+                         <span class="ms-2 small fw-bold text-danger">Lethal High Temp</span>
+                         {% elif survival == 'lethal_low' %}
+                         <img src="{{ url_for('static', filename='icons/LethalLowTemp.svg') }}" alt="Lethal Low Temperature" title="Lethal Low Temperature" style="height: 32px;">
+                         <span class="ms-2 small fw-bold text-info">Lethal Low Temp</span>
+                         {% elif growth == 'fast_growth' %}
+                         <img src="{{ url_for('static', filename='icons/FastGrowth.svg') }}" alt="Fast Growth" title="Fast Growth" style="height: 32px;">
+                         <span class="ms-2 small fw-bold text-success">Fast Growth</span>
+                         {% elif growth == 'slow_growth' %}
+                         <img src="{{ url_for('static', filename='icons/SlowGrowth.svg') }}" alt="Slow Growth" title="Slow Growth" style="height: 32px;">
+                         <span class="ms-2 small fw-bold text-secondary">Slow Growth</span>
+                         {% elif growth == 'hot_dormancy' %}
+                         <img src="{{ url_for('static', filename='icons/HotDormancy.svg') }}" alt="Hot Dormancy" title="Hot Dormancy" style="height: 32px;">
+                         <span class="ms-2 small fw-bold text-warning">Hot Dormancy</span>
+                         {% elif growth == 'cold_dormancy' %}
+                         <img src="{{ url_for('static', filename='icons/ColdDormancy.svg') }}" alt="Cold Dormancy" title="Cold Dormancy" style="height: 32px;">
+                         <span class="ms-2 small fw-bold text-primary">Cold Dormancy</span>
+                         {% else %}
+                         <span class="badge bg-light text-muted" title="Unknown">
+                             <i class="bi bi-question-circle fs-5"></i>
+                         </span>
+                         <span class="ms-2 small text-muted">Unknown</span>
+                         {% endif %}
+                     </div>
                 </div>
             </div>
 

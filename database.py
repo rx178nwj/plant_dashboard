@@ -61,6 +61,23 @@ def migrate_db_schema(cursor):
         except sqlite3.OperationalError as e:
             logger.error(f"Failed to add column 'watering_status' to 'daily_plant_analysis' table: {e}")
 
+    # Add soil_temperature1/2 columns to daily_plant_analysis
+    analysis_new_columns = {
+        'daily_soil_temp1_max': 'REAL',
+        'daily_soil_temp1_min': 'REAL',
+        'daily_soil_temp1_ave': 'REAL',
+        'daily_soil_temp2_max': 'REAL',
+        'daily_soil_temp2_min': 'REAL',
+        'daily_soil_temp2_ave': 'REAL'
+    }
+    for col_name, col_type in analysis_new_columns.items():
+        if col_name not in analysis_columns:
+            try:
+                cursor.execute(f"ALTER TABLE daily_plant_analysis ADD COLUMN {col_name} {col_type}")
+                logger.info(f"Added column '{col_name}' to 'daily_plant_analysis' table.")
+            except sqlite3.OperationalError as e:
+                logger.error(f"Failed to add column '{col_name}' to 'daily_plant_analysis' table: {e}")
+
     # --- Migrate sensor_data table for v2 device support (PlantMonitor_30) ---
     cursor.execute("PRAGMA table_info(sensor_data)")
     sensor_columns = [row['name'] for row in cursor.fetchall()]
@@ -160,6 +177,12 @@ def init_db():
         daily_soil_moisture_max REAL,
         daily_soil_moisture_min REAL,
         daily_soil_moisture_ave REAL,
+        daily_soil_temp1_max REAL,
+        daily_soil_temp1_min REAL,
+        daily_soil_temp1_ave REAL,
+        daily_soil_temp2_max REAL,
+        daily_soil_temp2_min REAL,
+        daily_soil_temp2_ave REAL,
         daily_watering_events INTEGER,
         daily_watering_volume REAL,
         daily_watering_duration INTEGER,

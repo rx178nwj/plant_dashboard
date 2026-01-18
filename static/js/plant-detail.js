@@ -343,6 +343,38 @@ async function updateAnalysisHistoryChart(managedPlantId, period, chartInstances
             scales.y_soil = { position: 'right', title: { display: true, text: 'Soil Moisture' }, grid: { drawOnChartArea: false } };
         }
 
+        // --- Soil Temperature 1 Datasets ---
+        if (historyData.some(d => d.daily_soil_temp1_ave !== null)) {
+            datasets.push({
+                label: 'Daily Soil Temp1 Min', data: historyData.map(d => d.daily_soil_temp1_min), yAxisID: 'y_temp',
+                borderColor: 'transparent', backgroundColor: 'rgba(0, 150, 136, 0.2)', pointRadius: 0, fill: '+1'
+            });
+            datasets.push({
+                label: 'Daily Soil Temp1 Max', data: historyData.map(d => d.daily_soil_temp1_max), yAxisID: 'y_temp',
+                borderColor: 'transparent', backgroundColor: 'rgba(0, 150, 136, 0.2)', pointRadius: 0, fill: false
+            });
+            datasets.push({
+                label: 'Avg Soil Temp1 (°C)', data: historyData.map(d => d.daily_soil_temp1_ave),
+                borderColor: 'rgba(0, 150, 136, 1)', yAxisID: 'y_temp', tension: 0.1, borderWidth: 2, pointRadius: 0
+            });
+        }
+
+        // --- Soil Temperature 2 Datasets ---
+        if (historyData.some(d => d.daily_soil_temp2_ave !== null)) {
+            datasets.push({
+                label: 'Daily Soil Temp2 Min', data: historyData.map(d => d.daily_soil_temp2_min), yAxisID: 'y_temp',
+                borderColor: 'transparent', backgroundColor: 'rgba(156, 39, 176, 0.2)', pointRadius: 0, fill: '+1'
+            });
+            datasets.push({
+                label: 'Daily Soil Temp2 Max', data: historyData.map(d => d.daily_soil_temp2_max), yAxisID: 'y_temp',
+                borderColor: 'transparent', backgroundColor: 'rgba(156, 39, 176, 0.2)', pointRadius: 0, fill: false
+            });
+            datasets.push({
+                label: 'Avg Soil Temp2 (°C)', data: historyData.map(d => d.daily_soil_temp2_ave),
+                borderColor: 'rgba(156, 39, 176, 1)', yAxisID: 'y_temp', tension: 0.1, borderWidth: 2, pointRadius: 0
+            });
+        }
+
         if (optionsContainer) {
             optionsContainer.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
                 const labelToToggle = checkbox.dataset.datasetLabel;
@@ -509,6 +541,20 @@ async function updateSensorHistoryChart(deviceId, period, chartInstances, select
                 );
                 scales.y_soil = { position: 'right', title: { display: true, text: 'Soil Moisture' }, grid: { drawOnChartArea: false } };
             }
+            if (historyData.some(d => d.soil_temperature1 !== null)) {
+                datasets.push(
+                    { label: 'Soil Temp1 Min', data: historyData.map(d => d.soil_temperature1_min), yAxisID: 'y_temp', borderColor: 'transparent', backgroundColor: 'rgba(0, 150, 136, 0.2)', pointRadius: 0, fill: '+1' },
+                    { label: 'Soil Temp1 Max', data: historyData.map(d => d.soil_temperature1_max), yAxisID: 'y_temp', borderColor: 'transparent', backgroundColor: 'rgba(0, 150, 136, 0.2)', pointRadius: 0, fill: false },
+                    { label: 'Soil Temp1 (°C)', data: historyData.map(d => d.soil_temperature1), borderColor: 'rgba(0, 150, 136, 1)', yAxisID: 'y_temp', tension: 0.1, borderWidth: 2, pointRadius: 0 }
+                );
+            }
+            if (historyData.some(d => d.soil_temperature2 !== null)) {
+                datasets.push(
+                    { label: 'Soil Temp2 Min', data: historyData.map(d => d.soil_temperature2_min), yAxisID: 'y_temp', borderColor: 'transparent', backgroundColor: 'rgba(156, 39, 176, 0.2)', pointRadius: 0, fill: '+1' },
+                    { label: 'Soil Temp2 Max', data: historyData.map(d => d.soil_temperature2_max), yAxisID: 'y_temp', borderColor: 'transparent', backgroundColor: 'rgba(156, 39, 176, 0.2)', pointRadius: 0, fill: false },
+                    { label: 'Soil Temp2 (°C)', data: historyData.map(d => d.soil_temperature2), borderColor: 'rgba(156, 39, 176, 1)', yAxisID: 'y_temp', tension: 0.1, borderWidth: 2, pointRadius: 0 }
+                );
+            }
 
         } else {
             // Raw data view (24h)
@@ -528,6 +574,16 @@ async function updateSensorHistoryChart(deviceId, period, chartInstances, select
                     { label: 'Soil Moisture', data: historyData.map(d => d.soil_moisture), borderColor: 'rgba(139, 69, 19, 0.8)', yAxisID: 'y_soil', tension: 0.2, pointRadius: 0 }
                 );
                 scales.y_soil = { position: 'right', title: { display: true, text: 'Soil Moisture' }, grid: { drawOnChartArea: false } };
+            }
+            if (historyData.some(d => d.soil_temperature1 !== null)) {
+                datasets.push(
+                    { label: 'Soil Temp1 (°C)', data: historyData.map(d => d.soil_temperature1), borderColor: 'rgba(0, 150, 136, 0.8)', yAxisID: 'y_temp', tension: 0.2, pointRadius: 0 }
+                );
+            }
+            if (historyData.some(d => d.soil_temperature2 !== null)) {
+                datasets.push(
+                    { label: 'Soil Temp2 (°C)', data: historyData.map(d => d.soil_temperature2), borderColor: 'rgba(156, 39, 176, 0.8)', yAxisID: 'y_temp', tension: 0.2, pointRadius: 0 }
+                );
             }
         }
         
