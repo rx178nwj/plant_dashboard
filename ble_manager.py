@@ -127,17 +127,17 @@ def _parse_sensor_data_v2(payload, device_id):
     logger.debug(f"[{device_id}] ペイロード(hex): {payload[:84].hex() if len(payload) >= 84 else payload.hex()}")
 
     # バイナリダンプ表示
-    print("📄 バイナリダンプ:")
-    for i in range(0, len(payload), 16):
-        hex_part = ' '.join(f'{b:02x}' for b in payload[i:i+16])
-        ascii_part = ''.join(chr(b) if 32 <= b < 127 else '.' for b in payload[i:i+16])
-        print(f"   {i:04x}: {hex_part:<48} {ascii_part}")
-    print()
+    #print("📄 バイナリダンプ:")
+    #for i in range(0, len(payload), 16):
+    #    hex_part = ' '.join(f'{b:02x}' for b in payload[i:i+16])
+    #    ascii_part = ''.join(chr(b) if 32 <= b < 127 else '.' for b in payload[i:i+16])
+    #    print(f"   {i:04x}: {hex_part:<48} {ascii_part}")
+    #print()
     
     offset = 0
     # data_version (uint8_t) - 1バイト
     data_version = struct.unpack_from("<B", payload, offset)[0]
-    print(f"   offset {hex(offset)}: data_version = {data_version}")
+    logger.debug(f"   offset {hex(offset)}: data_version = {data_version}")
     offset += 1
 
     # 構造体アライメントのため3バイトのパディングがある
@@ -145,29 +145,29 @@ def _parse_sensor_data_v2(payload, device_id):
 
     # datetime (tm_data_t - 36バイト = 9 x 4バイトint)
     datetime_dict, offset = _parse_tm_data_t(payload, offset)
-    print(f"   offset after tm_data_t: {hex(offset)}")
+    logger.debug(f"   offset after tm_data_t: {hex(offset)}")
 
     # センサーデータ (4 floats = 16バイト)
     lux, temperature, humidity, soil_moisture = struct.unpack_from("<4f", payload, offset)
-    print(f"   offset {hex(offset)}: lux={lux}, temp={temperature}, hum={humidity}, soil_moist={soil_moisture}")
+    logger.debug(f"   offset {hex(offset)}: lux={lux}, temp={temperature}, hum={humidity}, soil_moist={soil_moisture}")
     offset += 16
 
     sensor_error = struct.unpack_from("<B", payload, offset)[0]
-    print(f"   offset {hex(offset)}: sensor_error = {sensor_error}")
+    logger.debug(f"   offset {hex(offset)}: sensor_error = {sensor_error}")
     offset += 4 # センサーエラーの後に3バイトのパディングがある
 
     # 土壌温度 (2 floats = 8バイト)
     soil_temperature1, soil_temperature2 = struct.unpack_from("<2f", payload, offset)
-    print(f"   offset {hex(offset)}: soil_temp1={soil_temperature1}, soil_temp2={soil_temperature2}")
+    logger.debug(f"   offset {hex(offset)}: soil_temp1={soil_temperature1}, soil_temp2={soil_temperature2}")
     offset += 8  # 2 floats (8バイト) + 3バイトパディング
 
     # FDC1004静電容量データ (4 floats = 16バイト)
     fdc1004_format = f"<{config.FDC1004_CHANNEL_COUNT}f"
     soil_moisture_capacitance = struct.unpack_from(fdc1004_format, payload, offset)
-    print(f"   offset {hex(offset)}: capacitance={soil_moisture_capacitance}")
+    logger.debug(f"   offset {hex(offset)}: capacitance={soil_moisture_capacitance}")
     offset += 4 * config.FDC1004_CHANNEL_COUNT
 
-    print(f"   final offset: {hex(offset)} / {len(payload)}")
+    logger.debug(f"   final offset: {hex(offset)} / {len(payload)}")
     # datetimeオブジェクト作成
     try:
         dt = datetime(datetime_dict['tm_year'] + 1900, datetime_dict['tm_mon'] + 1, datetime_dict['tm_mday'], datetime_dict['tm_hour'], datetime_dict['tm_min'], datetime_dict['tm_sec'])
@@ -179,7 +179,7 @@ def _parse_sensor_data_v2(payload, device_id):
     logger.info(f"[{device_id}] Parsed datetime: {dt_str}")
 
     sensor_data = {
-        'data_version': data_version,
+        'data_version': 2,
         'datetime': dt_str,
         'light_lux': lux,
         'temperature': temperature,
@@ -398,8 +398,13 @@ class PlantDeviceBLE:
                 dt_str = dt.strftime("%Y-%m-%d %H:%M:%S")
 
                 sensor_data = {
-                    'datetime': dt_str, 'light_lux': lux, 'temperature': temp,
-                    'humidity': humidity, 'soil_moisture': soil, 'sensor_error': error,
+                    'data_version': 1,
+                    'datetime': dt_str, 
+                    'light_lux': lux, 
+                    'temperature': temp,
+                    'humidity': humidity, 
+                    'soil_moisture': soil, 
+                    'sensor_error': error,
                     'battery_level': None
                 }
 

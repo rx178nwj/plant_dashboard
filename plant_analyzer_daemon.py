@@ -45,12 +45,18 @@ def process_data_pipe():
         for line in f:
             try:
                 record = json.loads(line.strip())
-                device_id, timestamp, sensor_data = record.get("device_id"), record.get("timestamp"),  record.get("data")
+                device_id = record.get("device_id")
+                timestamp = record.get("timestamp")
+                sensor_data = record.get("data")
+                data_version = record.get("data_version", 1)  # デフォルトは1
                 
+                logger.info(f"Processing data for device {device_id} at {timestamp}, data_version={data_version}")
+
                 if record.get("error"):
                     dm.update_device_status(device_id, 'error')
                 elif sensor_data:
-                    dm.save_sensor_data(device_id, timestamp, sensor_data)
+                    # data_versionを渡してデータを保存
+                    dm.save_sensor_data(device_id, timestamp, sensor_data, data_version)
                     dm.update_device_status(device_id, 'connected', sensor_data.get('battery_level'))
                 else:
                     dm.update_device_status(device_id, 'disconnected')

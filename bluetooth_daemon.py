@@ -122,7 +122,7 @@ def get_devices_from_db():
     conn = None
     try:
         conn = get_db_connection()
-        devices = conn.execute('SELECT device_id, device_name, mac_address, device_type FROM devices').fetchall()
+        devices = conn.execute('SELECT device_id, device_name, mac_address, device_type, data_version FROM devices').fetchall()
         return [dict(row) for row in devices]
     except Exception as e:
         logger.error(f"データベースからデバイス情報の取得に失敗しました: {e}", exc_info=True)
@@ -141,7 +141,7 @@ def write_to_pipe(data):
 
 async def process_commands(plant_connections):
     """コマンドパイプを処理してBLE操作を実行する"""
-    logger.debug("コマンドパイプ内のコマンドを確認しています...")
+    logger.info("コマンドパイプ内のコマンドを確認しています...")
     
     if not os.path.exists(COMMAND_PIPE_PATH):
         return
@@ -261,6 +261,7 @@ async def main_loop():
                 dev_id = device.get('device_id')
                 device_type = device.get('device_type')
                 mac_address = device.get('mac_address')
+                data_version = device.get('data_version', 1)  # デフォルトは1
                 sensor_data = None
 
                 logger.info(f"device info: {device}")
@@ -278,9 +279,11 @@ async def main_loop():
                         sensor_data = await get_switchbot_adv_data(mac_address)
 
                     # 取得結果をpipeファイルに書き出す
+                    # data_versionをパイプデータに含める
                     pipe_data = {
                         "device_id": dev_id,
                         "timestamp": datetime.now().isoformat(),
+                        "data_version": data_version,
                         "data": sensor_data # データがなくてもNoneとして記録
                     }
                     write_to_pipe(pipe_data)

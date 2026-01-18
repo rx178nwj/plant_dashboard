@@ -62,12 +62,25 @@ def update_device_status(device_id, status, battery=None):
         conn.commit()
         conn.close()
 
-def save_sensor_data(device_id, timestamp, data):
-    """センサーデータをDBに保存します。タイムスタンプはアプリケーションの現在時刻を明示的に使用します。"""
+def save_sensor_data(device_id, timestamp, data, data_version=1):
+    """
+    センサーデータをDBに保存します。
+    data_versionに応じてv1/v2デバイスのデータに対応。
+
+    Args:
+        device_id: デバイスID
+        timestamp: タイムスタンプ (ISO形式文字列)
+        data: センサーデータ辞書
+        data_version: データバージョン (1=v1デバイス, 2=v2デバイス)
+    """
     if not data:
         return
+
+    logging.info(f"Saving sensor data for device {device_id} with data_version {data_version}")
+
     conn = get_db_connection()
     formatted_timestamp = ""
+
     if timestamp:
         # ISO形式の文字列をdatetimeオブジェクトにパースし、指定の形式に再フォーマット
         try:
@@ -81,13 +94,54 @@ def save_sensor_data(device_id, timestamp, data):
         formatted_timestamp = datetime.now(JST).strftime("%Y-%m-%d %H:%M:%S")
 
     try:
-        conn.execute(
-            # timestampカラムを明示的に指定してINSERT
-            "INSERT INTO sensor_data (device_id, timestamp, temperature, humidity, light_lux, soil_moisture) VALUES (?, ?, ?, ?, ?, ?)",
-            (device_id, formatted_timestamp, data.get('temperature'), data.get('humidity'), data.get('light_lux'), data.get('soil_moisture'))
-        )
+        
+        # v2デバイスのカラム
+        if data_version == 2:
+            extended_columns = "(device_id, timestamp, temperature, humidity, light_lux, soil_moisture, data_version, soil_temperature1, soil_temperature2, capacitance_ch1, capacitance_ch2, capacitance_ch3, capacitance_ch4)"
+            extended_values = "?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?"
+            extended_data = (
+                device_id,
+                formatted_timestamp,
+                data.get('temperature'),
+                data.get('humidity'),
+                data.get('light_lux'),
+                data.get('soil_moisture'),
+                data_version,
+                data.get('soil_temperature1'),
+                data.get('soil_temperature2'),
+                data.get('capacitance_ch1'),
+                data.get('capacitance_ch2'),
+                data.get('capacitance_ch3'),
+                data.get('capacitance_ch4')
+            )
+
+            conn.execute(
+                f"INSERT INTO sensor_data {extended_columns} VALUES ({extended_values})",
+                extended_data
+            )
+            logger.info(f"Saved v2 sensor data for {device_id} at {formatted_timestamp}")
+        else:
+            # v1デバイスのカラム
+            base_columns = "(device_id, timestamp, temperature, humidity, light_lux, soil_moisture, data_version)"
+            base_values = "?, ?, ?, ?, ?, ?, ?"
+            base_data = (
+                device_id,
+                formatted_timestamp,
+                data.get('temperature'),
+                data.get('humidity'),
+                data.get('light_lux'),
+                data.get('soil_moisture'),
+                data_version
+            )
+
+            # v1デバイス
+            conn.execute(
+                f"INSERT INTO sensor_data {base_columns} VALUES ({base_values})",
+                base_data
+            )
+            logger.info(f"Saved v1 sensor data for {device_id} at {formatted_timestamp}")
+
         conn.commit()
-        logger.info(f"Saved sensor data for {device_id} at {data.get('timestamp')}")
     except sqlite3.Error as e:
         logger.error(f"Failed to save sensor data for {device_id}: {e}")
     finally:

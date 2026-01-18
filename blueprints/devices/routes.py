@@ -12,6 +12,39 @@ devices_bp = Blueprint('devices', __name__, template_folder='../../templates')
 logger = logging.getLogger(__name__)
 
 
+def determine_data_version(device_name):
+    """
+    デバイス名からdata_versionを判定する
+
+    PlantMonitor_XX_YYYY形式のデバイス名から、XXの部分(ハードウェアバージョン)を取得し、
+    30以上ならdata_version=2、それ以外はdata_version=1を返す
+
+    Args:
+        device_name: デバイス名 (例: "PlantMonitor_30_B9B2", "PlantMonitor_20_DA06")
+
+    Returns:
+        int: data_version (1 or 2)
+    """
+    if not device_name:
+        return 1
+
+    # PlantMonitor_XX_YYYY形式のデバイス名からハードウェアバージョンを抽出
+    if device_name.startswith('PlantMonitor_'):
+        parts = device_name.split('_')
+        if len(parts) >= 2:
+            try:
+                hw_version = int(parts[1])
+                # ハードウェアバージョン30以上はdata_version=2
+                if hw_version >= 30:
+                    return 2
+            except ValueError:
+                # 数値に変換できない場合はデフォルト値を返す
+                logger.warning(f"デバイス名 '{device_name}' からハードウェアバージョンを抽出できませんでした")
+
+    # デフォルトはdata_version=1
+    return 1
+
+
 @devices_bp.route('/devices')
 @requires_auth
 def devices():
@@ -181,9 +214,14 @@ def api_add_device():
         mac_suffix = data['mac_address'].replace(':', '')[-6:].lower()
         device_id = f"{device_type}_{mac_suffix}"
 
+        # デバイス名からdata_versionを自動判定
+        device_name = data['device_name']
+        data_version = determine_data_version(device_name)
+        logger.info(f"デバイス '{device_name}' のdata_versionを {data_version} として登録します")
+
         conn.execute(
-            "INSERT INTO devices (device_id, device_name, mac_address, device_type) VALUES (?, ?, ?, ?)",
-            (device_id, data['device_name'], data['mac_address'], data['device_type'])
+            "INSERT INTO devices (device_id, device_name, mac_address, device_type, data_version) VALUES (?, ?, ?, ?, ?)",
+            (device_id, device_name, data['mac_address'], data['device_type'], data_version)
         )
         conn.commit()
         conn.close()

@@ -83,6 +83,17 @@ def migrate_db_schema(cursor):
             except sqlite3.OperationalError as e:
                 logger.error(f"Failed to add column '{col_name}' to 'sensor_data' table: {e}")
 
+    # --- Migrate devices table for v2 device support ---
+    cursor.execute("PRAGMA table_info(devices)")
+    device_columns = [row['name'] for row in cursor.fetchall()]
+
+    if 'data_version' not in device_columns:
+        try:
+            cursor.execute("ALTER TABLE devices ADD COLUMN data_version INTEGER")
+            logger.info("Added column 'data_version' to 'devices' table.")
+        except sqlite3.OperationalError as e:
+            logger.error(f"Failed to add column 'data_version' to 'devices' table: {e}")
+
 
 def init_db():
     conn = get_db_connection()
@@ -90,10 +101,10 @@ def init_db():
 
     # --- Table Creations ---
     cursor.execute("""
-    CREATE TABLE IF NOT EXISTS devices (device_id TEXT PRIMARY KEY, device_name TEXT NOT NULL, mac_address TEXT UNIQUE NOT NULL, last_seen DATETIME, battery_level INTEGER, connection_status TEXT DEFAULT 'disconnected', device_type TEXT NOT NULL DEFAULT 'plant_sensor');
+    CREATE TABLE IF NOT EXISTS devices (device_id TEXT PRIMARY KEY, device_name TEXT NOT NULL, mac_address TEXT UNIQUE NOT NULL, last_seen DATETIME, battery_level INTEGER, data_version INTEGER, connection_status TEXT DEFAULT 'disconnected', device_type TEXT NOT NULL DEFAULT 'plant_sensor');
     """)
     cursor.execute("""
-    CREATE TABLE IF NOT EXISTS sensor_data (id INTEGER PRIMARY KEY AUTOINCREMENT, device_id TEXT, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP, temperature REAL, humidity REAL, light_lux REAL, soil_moisture REAL, FOREIGN KEY (device_id) REFERENCES devices(device_id));
+    CREATE TABLE IF NOT EXISTS sensor_data (id INTEGER PRIMARY KEY AUTOINCREMENT, device_id TEXT, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP, temperature REAL, humidity REAL, light_lux REAL, soil_moisture REAL, soil_temperature1 REAL, soil_temperature2 REAL, capacitance_ch1 REAL, capacitance_ch2 REAL, capacitance_ch3 REAL, capacitance_ch4 REAL, data_version INTEGER, FOREIGN KEY (device_id) REFERENCES devices(device_id));
     """)
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS system_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, device_id TEXT, log_level TEXT, message TEXT, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP);
