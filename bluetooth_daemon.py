@@ -273,7 +273,11 @@ async def main_loop():
                         if dev_id not in plant_sensor_connections:
                             plant_sensor_connections[dev_id] = PlantDeviceBLE(mac_address, dev_id)
                         ble_device = plant_sensor_connections[dev_id]
-                        sensor_data = await ble_device.get_sensor_data()
+                        try:
+                            sensor_data = await ble_device.get_sensor_data()
+                        finally:
+                            # 接続を明示的に切断してBluetoothリソースを解放
+                            await ble_device.disconnect()
 
                     elif device_type and device_type.startswith('switchbot_'):
                         sensor_data = await get_switchbot_adv_data(mac_address)
