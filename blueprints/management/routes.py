@@ -16,7 +16,24 @@ COMMAND_PIPE_PATH = "/tmp/plant_dashboard_cmd_pipe.jsonl"
 def management():
     """植物管理ページを表示します。"""
     conn = dm.get_db_connection()
-    managed_plants = conn.execute("SELECT * FROM managed_plants").fetchall()
+    
+    managed_plants_raw = conn.execute("""
+        SELECT
+            mp.*,
+            p.genus,
+            p.species,
+            p.variety,
+            p.image_url as library_image_url,
+            ps.device_name as plant_sensor_name,
+            sb.device_name as switchbot_name
+        FROM managed_plants mp
+        LEFT JOIN plants p ON mp.library_plant_id = p.plant_id
+        LEFT JOIN devices ps ON mp.assigned_plant_sensor_id = ps.device_id
+        LEFT JOIN devices sb ON mp.assigned_switchbot_id = sb.device_id
+    """).fetchall()
+
+    managed_plants = [dict(row) for row in managed_plants_raw]
+
     plant_sensors = conn.execute("SELECT device_id, device_name FROM devices WHERE device_type = 'plant_sensor'").fetchall()
     switchbots = conn.execute("SELECT device_id, device_name FROM devices WHERE device_type LIKE 'switchbot_%'").fetchall()
     plant_library = conn.execute("SELECT plant_id, genus, species, variety FROM plants").fetchall()

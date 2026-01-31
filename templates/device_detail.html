@@ -122,11 +122,101 @@
                             <i class="bi bi-moisture text-success" style="font-size: 2rem;"></i>
                             <div class="mt-2">
                                 <div class="fs-4 fw-bold">{{ sensor.soil_moisture }}</div>
-                                <div class="text-muted small">Soil Moisture</div>
+                                <div class="text-muted small">Soil Moisture (Raw)</div>
                             </div>
                         </div>
                         {% endif %}
                     </div>
+
+                    {% if device.data_version >= 2 %}
+                    <hr class="my-3">
+                    <h6 class="text-muted mb-3"><i class="bi bi-flower1"></i> Extended Plant Sensor Data</h6>
+                    <div class="row text-center">
+                        {% if sensor.capacitance_ch1 is not none %}
+                        <div class="col-md-3 mb-3">
+                            <i class="bi bi-moisture text-success" style="font-size: 2rem;"></i>
+                            <div class="mt-2">
+                                <div class="fs-5 fw-bold">{{ sensor.capacitance_ch1 | round(1) if sensor.capacitance_ch1 is not none else '--' }}</div>
+                                <div class="text-muted small">Soil Moisture CH1 (pF)</div>
+                            </div>
+                        </div>
+                        {% endif %}
+                        {% if sensor.capacitance_ch2 is not none %}
+                        <div class="col-md-3 mb-3">
+                            <i class="bi bi-moisture text-success" style="font-size: 2rem;"></i>
+                            <div class="mt-2">
+                                <div class="fs-5 fw-bold">{{ sensor.capacitance_ch2 | round(1) if sensor.capacitance_ch2 is not none else '--' }}</div>
+                                <div class="text-muted small">Soil Moisture CH2 (pF)</div>
+                            </div>
+                        </div>
+                        {% endif %}
+                        {% if sensor.capacitance_ch3 is not none %}
+                        <div class="col-md-3 mb-3">
+                            <i class="bi bi-moisture text-success" style="font-size: 2rem;"></i>
+                            <div class="mt-2">
+                                <div class="fs-5 fw-bold">{{ sensor.capacitance_ch3 | round(1) if sensor.capacitance_ch3 is not none else '--' }}</div>
+                                <div class="text-muted small">Soil Moisture CH3 (pF)</div>
+                            </div>
+                        </div>
+                        {% endif %}
+                        {% if sensor.capacitance_ch4 is not none %}
+                        <div class="col-md-3 mb-3">
+                            <i class="bi bi-moisture text-success" style="font-size: 2rem;"></i>
+                            <div class="mt-2">
+                                <div class="fs-5 fw-bold">{{ sensor.capacitance_ch4 | round(1) if sensor.capacitance_ch4 is not none else '--' }}</div>
+                                <div class="text-muted small">Soil Moisture CH4 (pF)</div>
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        {% if sensor.soil_temperature1 is not none %}
+                        <div class="col-md-3 mb-3">
+                            <i class="bi bi-thermometer text-danger" style="font-size: 2rem;"></i>
+                            <div class="mt-2">
+                                <div class="fs-5 fw-bold">{{ sensor.soil_temperature1 | round(1) if sensor.soil_temperature1 is not none else '--' }}°C</div>
+                                <div class="text-muted small">Soil Temp 1</div>
+                            </div>
+                        </div>
+                        {% endif %}
+                        {% if sensor.soil_temperature2 is not none %}
+                        <div class="col-md-3 mb-3">
+                            <i class="bi bi-thermometer text-danger" style="font-size: 2rem;"></i>
+                            <div class="mt-2">
+                                <div class="fs-5 fw-bold">{{ sensor.soil_temperature2 | round(1) if sensor.soil_temperature2 is not none else '--' }}°C</div>
+                                <div class="text-muted small">Soil Temp 2</div>
+                            </div>
+                        </div>
+                        {% endif %}
+                        {% if sensor.soil_temperature3 is not none %}
+                        <div class="col-md-3 mb-3">
+                            <i class="bi bi-thermometer text-danger" style="font-size: 2rem;"></i>
+                            <div class="mt-2">
+                                <div class="fs-5 fw-bold">{{ sensor.soil_temperature3 | round(1) if sensor.soil_temperature3 is not none else '--' }}°C</div>
+                                <div class="text-muted small">Soil Temp 3</div>
+                            </div>
+                        </div>
+                        {% endif %}
+                        {% if sensor.soil_temperature4 is not none %}
+                        <div class="col-md-3 mb-3">
+                            <i class="bi bi-thermometer text-danger" style="font-size: 2rem;"></i>
+                            <div class="mt-2">
+                                <div class="fs-5 fw-bold">{{ sensor.soil_temperature4 | round(1) if sensor.soil_temperature4 is not none else '--' }}°C</div>
+                                <div class="text-muted small">Soil Temp 4</div>
+                            </div>
+                        </div>
+                        {% endif %}
+                        {% if sensor.ex_temperature is not none %}
+                        <div class="col-md-3 mb-3">
+                            <i class="bi bi-thermometer text-danger" style="font-size: 2rem;"></i>
+                            <div class="mt-2">
+                                <div class="fs-5 fw-bold">{{ sensor.ex_temperature | round(1) if sensor.ex_temperature is not none else '--' }}°C</div>
+                                <div class="text-muted small">Extend Temp</div>
+                            </div>
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+
                     {% if sensor.timestamp %}
                     <div class="text-center mt-2">
                         <small class="text-muted"><i class="bi bi-clock"></i> Last updated: {{ sensor.timestamp }}</small>
@@ -245,6 +335,39 @@
                             <i class="bi bi-trash"></i> Delete Device
                         </button>
                     </div>
+
+                    {% if device.device_type == 'plant_sensor' %}
+                    <hr class="my-3">
+                    <h6 class="text-muted"><i class="bi bi-lightbulb"></i> LED Control</h6>
+                    <div class="row g-2 align-items-center mb-2">
+                        <div class="col-sm-6">
+                            <label for="led-color-select" class="form-label-sm">Color</label>
+                            <select class="form-select form-select-sm" id="led-color-select">
+                                <option value="FF0000">Red</option>
+                                <option value="00FF00">Green</option>
+                                <option value="0000FF">Blue</option>
+                                <option value="FFFF00">Yellow</option>
+                                <option value="00FFFF">Cyan</option>
+                                <option value="FF00FF">Magenta</option>
+                                <option value="FFFFFF" selected>White</option>
+                                <option value="000000">Off</option>
+                            </select>
+                        </div>
+                        <div class="col-sm-6">
+                            <label for="led-brightness-input" class="form-label-sm">Brightness (%)</label>
+                            <input type="number" class="form-control form-control-sm" id="led-brightness-input" value="50" min="0" max="100">
+                        </div>
+                    </div>
+                    <div class="mb-2">
+                        <label for="led-duration-input" class="form-label-sm">Duration (ms)</label>
+                        <input type="number" class="form-control form-control-sm" id="led-duration-input" value="1000" min="0">
+                    </div>
+                    <div class="d-grid">
+                        <button class="btn btn-sm btn-outline-primary" id="control-led-button">
+                            <i class="bi bi-lightbulb-fill"></i> Light Up
+                        </button>
+                    </div>
+                    {% endif %}
                 </div>
             </div>
         </div>
@@ -284,6 +407,7 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="{{ url_for('static', filename='js/device-detail.js') }}"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const deleteBtn = document.getElementById('delete-device-btn');

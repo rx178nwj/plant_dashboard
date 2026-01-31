@@ -25,18 +25,24 @@ function initializeManagementDashboard() {
 
     const loadManagedPlants = async () => {
         try {
-            const response = await fetch('/api/managed-plants');
-            managedPlantsData = await response.json();
-            renderManagedPlantList(managedPlantsData);
+            // Fetch enriched data from the management route, not the generic API
+            const response = await fetch(window.location.pathname); 
+            const html = await response.text();
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(html, 'text/html');
+            const newListContent = doc.getElementById('managed-plant-list').innerHTML;
+            plantList.innerHTML = newListContent;
+
+            // Also, separately fetch the raw data for form population
+            const dataResponse = await fetch('/api/managed-plants');
+            managedPlantsData = await dataResponse.json();
+
         } catch (error) { console.error('Failed to load managed plants:', error); }
     };
+    
+    // This function is no longer needed as we are reloading the list from the server-rendered HTML
+    // const renderManagedPlantList = (plants) => { ... };
 
-    const renderManagedPlantList = (plants) => {
-        if (plants.length === 0) {
-            plantList.innerHTML = '<div class="list-group-item">No plants yet.</div>'; return;
-        }
-        plantList.innerHTML = plants.map(p => `<a href="#" class="list-group-item list-group-item-action" data-managed-plant-id="${p.managed_plant_id}">${p.plant_name}</a>`).join('');
-    };
 
     addPlantBtn.addEventListener('click', () => {
         managementForm.reset();
@@ -204,5 +210,12 @@ function initializeManagementDashboard() {
         });
     }
 
-    loadManagedPlants();
+    // On initial load, the list is already rendered by the server.
+    // We only need to fetch the raw data for form population.
+    fetch('/api/managed-plants')
+        .then(response => response.json())
+        .then(data => {
+            managedPlantsData = data;
+        })
+        .catch(error => console.error('Failed to load initial managed plants data:', error));
 }

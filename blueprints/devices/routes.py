@@ -69,7 +69,7 @@ def devices_profiles():
 
         # 最新のセンサーデータを取得
         sensor_data = conn.execute("""
-            SELECT temperature, humidity, light_lux, soil_moisture, timestamp
+            SELECT *
             FROM sensor_data
             WHERE device_id = ?
             ORDER BY timestamp DESC
@@ -119,7 +119,7 @@ def device_profile_detail(device_id):
 
     # 最新のセンサーデータを取得
     sensor_data = conn.execute("""
-        SELECT temperature, humidity, light_lux, soil_moisture, timestamp
+        SELECT *
         FROM sensor_data
         WHERE device_id = ?
         ORDER BY timestamp DESC
@@ -296,6 +296,57 @@ def api_write_watering_profile(sensor_id):
 
     except Exception as e:
         logger.error(f"コマンドのデーモンへの送信に失敗: {e}", exc_info=True)
+        response_data = json.dumps({'success': False, 'message': f'サーバー内部でエラーが発生しました: {e}'})
+        return Response(response_data, status=500, mimetype='application/json')
+
+
+@devices_bp.route('/api/control-led', methods=['POST'])
+@requires_auth
+def api_control_led():
+    """デバイスのLEDを制御するためのコマンドを送信します。"""
+    logger.info("Received request to control LED")
+
+    data = request.json
+    device_id = data.get('device_id')
+    red = data.get('red')
+    green = data.get('green')
+    blue = data.get('blue')
+    brightness = data.get('brightness')
+    duration_ms = data.get('duration_ms')
+
+    if not all([device_id, red is not None, green is not None, blue is not None, brightness is not None, duration_ms is not None]):
+        response_data = json.dumps({'success': False, 'message': 'Missing LED control parameters.'})
+        return Response(response_data, status=400, mimetype='application/json')
+
+    conn = dm.get_db_connection()
+    device = conn.execute('SELECT device_id FROM devices WHERE device_id = ?', (device_id,)).fetchone()
+    conn.close()
+
+    if not device:
+        response_data = json.dumps({'success': False, 'message': '指定されたデバイスが見つかりません。'})
+        return Response(response_data, status=404, mimetype='application/json')
+
+    try:
+        command = {
+            "command": "control_led",
+            "device_id": device_id,
+            "payload": {
+                "red": red,
+                "green": green,
+                "blue": blue,
+                "brightness": brightness,
+                "duration_ms": duration_ms
+            }
+        }
+        with open(config.COMMAND_PIPE_PATH, "a") as f:
+            f.write(json.dumps(command) + "\n")
+
+        logger.info(f"デバイス {device_id} へのLED制御コマンドをキューに追加しました。")
+        response_data = json.dumps({'success': True, 'message': 'LED制御コマンドを受け付けました。'})
+        return Response(response_data, status=200, mimetype='application/json')
+
+    except Exception as e:
+        logger.error(f"LED制御コマンドのデーモンへの送信に失敗: {e}", exc_info=True)
         response_data = json.dumps({'success': False, 'message': f'サーバー内部でエラーが発生しました: {e}'})
         return Response(response_data, status=500, mimetype='application/json')
 

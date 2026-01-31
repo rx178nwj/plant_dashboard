@@ -85,6 +85,9 @@ def migrate_db_schema(cursor):
     sensor_new_columns = {
         'soil_temperature1': 'REAL',
         'soil_temperature2': 'REAL',
+        'soil_temperature3': 'REAL',
+        'soil_temperature4': 'REAL',
+        'ex_temperature': 'REAL',
         'capacitance_ch1': 'REAL',
         'capacitance_ch2': 'REAL',
         'capacitance_ch3': 'REAL',
@@ -121,7 +124,7 @@ def init_db():
     CREATE TABLE IF NOT EXISTS devices (device_id TEXT PRIMARY KEY, device_name TEXT NOT NULL, mac_address TEXT UNIQUE NOT NULL, last_seen DATETIME, battery_level INTEGER, data_version INTEGER, connection_status TEXT DEFAULT 'disconnected', device_type TEXT NOT NULL DEFAULT 'plant_sensor');
     """)
     cursor.execute("""
-    CREATE TABLE IF NOT EXISTS sensor_data (id INTEGER PRIMARY KEY AUTOINCREMENT, device_id TEXT, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP, temperature REAL, humidity REAL, light_lux REAL, soil_moisture REAL, soil_temperature1 REAL, soil_temperature2 REAL, capacitance_ch1 REAL, capacitance_ch2 REAL, capacitance_ch3 REAL, capacitance_ch4 REAL, data_version INTEGER, FOREIGN KEY (device_id) REFERENCES devices(device_id));
+    CREATE TABLE IF NOT EXISTS sensor_data (id INTEGER PRIMARY KEY AUTOINCREMENT, device_id TEXT, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP, temperature REAL, humidity REAL, light_lux REAL, soil_moisture REAL, soil_temperature1 REAL, soil_temperature2 REAL, soil_temperature3 REAL, soil_temperature4 REAL, ex_temperature REAL, capacitance_ch1 REAL, capacitance_ch2 REAL, capacitance_ch3 REAL, capacitance_ch4 REAL, data_version INTEGER, FOREIGN KEY (device_id) REFERENCES devices(device_id));
     """)
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS system_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, device_id TEXT, log_level TEXT, message TEXT, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP);
@@ -204,4 +207,10 @@ def init_db():
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    init_db()
+    logger.info("Starting database migration...")
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    migrate_db_schema(cursor)
+    conn.commit()
+    conn.close()
+    logger.info("Database migration finished.")

@@ -18,7 +18,32 @@
                 <div id="managed-plant-list" class="list-group list-group-flush">
                     {% for plant in managed_plants %}
                     <a href="#" class="list-group-item list-group-item-action" data-managed-plant-id="{{ plant.managed_plant_id }}">
-                        {{ plant.plant_name }}
+                        <div class="d-flex w-100 align-items-center">
+                            <img src="{{ plant.image_url or 'https://placehold.co/100x150/eee/ccc?text=Plant' }}" 
+                                 onerror="this.onerror=null;this.src='https://placehold.co/100x150/eee/ccc?text=No+Image';"
+                                 class="rounded me-3" style="width: 60px; height: 90px; object-fit: cover;" alt="{{ plant.plant_name }}">
+                            <div class="flex-grow-1">
+                                <h6 class="mb-1">{{ plant.plant_name }}</h6>
+                                
+                                {% if plant.library_plant_id %}
+                                <div class="d-flex align-items-center text-muted small mb-2">
+                                    <img src="{{ plant.library_image_url or 'https://placehold.co/50x50/eee/ccc?text=Species' }}" 
+                                         onerror="this.onerror=null;this.src='https://placehold.co/50x50/eee/ccc?text=No+Image';"
+                                         class="rounded me-2" style="width: 30px; height: 30px; object-fit: cover;" alt="Species Image">
+                                    <em>{{ plant.genus }} {{ plant.species }} {{ plant.variety }}</em>
+                                </div>
+                                {% endif %}
+
+                                <div class="small">
+                                    {% if plant.switchbot_name %}
+                                    <span class="badge bg-info text-dark"><i class="bi bi-thermometer-sun"></i> {{ plant.switchbot_name }}</span>
+                                    {% endif %}
+                                    {% if plant.plant_sensor_name %}
+                                    <span class="badge bg-success"><i class="bi bi-flower2"></i> {{ plant.plant_sensor_name }}</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
                     </a>
                     {% else %}
                     <div class="list-group-item">No plants are being managed yet.</div>

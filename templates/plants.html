@@ -18,8 +18,16 @@
                 <div id="plant-list" class="list-group list-group-flush">
                     {% for plant in plants %}
                     <a href="#" class="list-group-item list-group-item-action" data-plant-id="{{ plant.plant_id }}">
-                        <strong>{{ plant.variety or plant.species }}</strong><br>
-                        <small class="text-muted">{{ plant.genus }}</small>
+                        <div class="d-flex align-items-center">
+                            <img src="{{ plant.image_url or 'https://placehold.co/100x100/eee/ccc?text=No+Image' }}"
+                                 onerror="this.onerror=null;this.src='https://placehold.co/100x100/eee/ccc?text=No+Image';"
+                                 class="rounded me-3" style="width: 60px; height: 60px; object-fit: cover;"
+                                 alt="{{ plant.variety or plant.species }}">
+                            <div class="flex-grow-1">
+                                <h6 class="mb-1">{{ plant.variety or plant.species }}</h6>
+                                <small class="text-muted">{{ plant.genus }}</small>
+                            </div>
+                        </div>
                     </a>
                     {% else %}
                     <div class="list-group-item">No plants yet. Click 'New' to add one.</div>

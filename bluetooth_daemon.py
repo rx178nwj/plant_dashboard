@@ -196,6 +196,44 @@ async def process_commands(plant_connections):
                             logger.error(f"{device_id} への閾値の送信に失敗しました: {e}")
                     else:
                         logger.error(f"set_watering_thresholds のペイロードが無効です: {payload}")
+                
+                elif command == "control_led":
+                    if device_id not in plant_connections:
+                        logger.warning(f"No active connection for {device_id} to control LED. Attempting to connect.")
+                        # Re-fetch MAC address for this device from the DB
+                        conn = None
+                        try:
+                            conn = get_db_connection()
+                            dev_info = conn.execute("SELECT mac_address FROM devices WHERE device_id = ?", (device_id,)).fetchone()
+                            if dev_info:
+                                plant_connections[device_id] = PlantDeviceBLE(dev_info['mac_address'], device_id)
+                            else:
+                                logger.error(f"Device {device_id} not found in database for command execution.")
+                                continue
+                        except Exception as e:
+                            logger.error(f"Error fetching device info: {e}", exc_info=True)
+                            continue
+                        finally:
+                            if conn:
+                                conn.close()
+                    
+                    ble_device = plant_connections[device_id]
+                    red = payload.get('red')
+                    green = payload.get('green')
+                    blue = payload.get('blue')
+                    brightness = payload.get('brightness')
+                    duration_ms = payload.get('duration_ms', 0)
+
+                    if all(v is not None for v in [red, green, blue, brightness]):
+                        try:
+                            logger.info(f"Sending LED control command to {device_id}: R={red}, G={green}, B={blue}, Brightness={brightness}, Duration={duration_ms}ms")
+                            success = await ble_device.control_led(red, green, blue, brightness, duration_ms)
+                            if success:
+                                logger.info(f"Successfully sent LED control command to {device_id}.")
+                        except Exception as e:
+                            logger.error(f"Failed to send LED control command to {device_id}: {e}")
+                    else:
+                        logger.error(f"Invalid payload for control_led: {payload}")
 
             except Exception as e:
                 logger.error(f"コマンド処理中にエラーが発生しました: {line.strip()} - {e}")

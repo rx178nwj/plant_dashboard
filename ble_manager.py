@@ -21,6 +21,7 @@ SWITCHBOT_COMMON_SERVICE_UUID = "0000fd3d-0000-1000-8000-00805f9b34fb"
 # --- コマンド定義 ---
 CMD_GET_SENSOR_DATA = 0x01
 CMD_SET_WATERING_THRESHOLDS = 0x02
+CMD_CONTROL_LED = 0x18
 
 # Ensure log directory exists
 config.LOG_FILE_PATH = "/var/log/plant_dashboard/bluetooth_manager.log"
@@ -327,6 +328,68 @@ class PlantDeviceBLE:
             raise
         except BleakError as e:
             logger.error(f"[{self.device_id}] 閾値書き込み中にBLEエラーが発生: {e}")
+            self.is_connected = False
+            raise
+        finally:
+            if self.client.is_connected:
+                await self.client.stop_notify(RESPONSE_CHAR_UUID)
+
+    @retry_on_failure()
+    async def control_led(self, red: int, green: int, blue: int, brightness: int, duration_ms: int = 0):
+        """
+        デバイスのWS2812 LEDの色、輝度、点灯時間を制御します。
+        リトライ機能とタイムアウト設定を含む。
+        """
+        if not await self.ensure_connection():
+            raise BleakError(f"デバイス {self.device_id} への接続を確立できませんでした")
+
+        notification_received = asyncio.Event()
+        success = False
+
+        def notification_handler(sender: int, data: bytearray):
+            nonlocal success
+            logger.debug(f"[{self.device_id}] LED制御応答を受信 from {sender}: {data.hex()}")
+            if len(data) >= 3:
+                resp_id, status_code, resp_seq = struct.unpack('<BBB', data[:3])
+                if resp_id == CMD_CONTROL_LED and status_code == 0 and resp_seq == self.sequence_num:
+                    success = True
+                    logger.info(f"[{self.device_id}] LED制御の確認応答を受信しました")
+            notification_received.set()
+
+        try:
+            await self.client.start_notify(RESPONSE_CHAR_UUID, notification_handler)
+
+            self.sequence_num = (self.sequence_num + 1) % 256
+            # ws2812_led_control_t構造体: red, green, blue (uint8_t), brightness (uint8_t), duration_ms (uint16_t)
+            payload = struct.pack('<BBBHH', red, green, blue, brightness, duration_ms)
+            command_packet = struct.pack('<BBH', CMD_CONTROL_LED, self.sequence_num, len(payload)) + payload
+
+            logger.info(
+                f"[{self.device_id}] LED制御コマンドを {COMMAND_CHAR_UUID} へ書き込み中: "
+                f"R={red}, G={green}, B={blue}, Brightness={brightness}, Duration={duration_ms}ms"
+            )
+            await self.client.write_gatt_char(COMMAND_CHAR_UUID, command_packet)
+
+            logger.debug(
+                f"[{self.device_id}] 書き込み確認を待機中 "
+                f"(タイムアウト: {config.BLE_OPERATION_TIMEOUT}秒)..."
+            )
+            await asyncio.wait_for(notification_received.wait(), timeout=config.BLE_OPERATION_TIMEOUT)
+
+            if not success:
+                raise BleakError("LED制御の確認応答が正しく受信されませんでした")
+
+            return True
+
+        except asyncio.TimeoutError:
+            logger.error(
+                f"[{self.device_id}] LED制御応答の待機中にタイムアウトしました "
+                f"(タイムアウト: {config.BLE_OPERATION_TIMEOUT}秒)"
+            )
+            self.is_connected = False
+            raise
+        except BleakError as e:
+            logger.error(f"[{self.device_id}] LED制御中にBLEエラーが発生: {e}")
             self.is_connected = False
             raise
         finally:
