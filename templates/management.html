@@ -47,11 +47,15 @@
                         <div class="mb-3">
                             <div class="form-check form-check-inline">
                                 <input class="form-check-input" type="radio" name="image-source" id="image-source-url" value="url" checked>
-                                <label class="form-check-label" for="image-source-url">Web URL</label>
+                                <label class="form-check-label" for="image-source-url"><i class="bi bi-link-45deg"></i> Web URL</label>
                             </div>
                             <div class="form-check form-check-inline">
                                 <input class="form-check-input" type="radio" name="image-source" id="image-source-upload" value="upload">
-                                <label class="form-check-label" for="image-source-upload">Upload from PC</label>
+                                <label class="form-check-label" for="image-source-upload"><i class="bi bi-folder2-open"></i> ファイル選択</label>
+                            </div>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="radio" name="image-source" id="image-source-camera" value="camera">
+                                <label class="form-check-label" for="image-source-camera"><i class="bi bi-camera-fill"></i> カメラで撮影</label>
                             </div>
                         </div>
                         <div id="image-url-group" class="mb-3">
@@ -59,6 +63,14 @@
                         </div>
                         <div id="image-upload-group" class="mb-3" style="display: none;">
                             <input type="file" id="plant-image-upload" name="plant-image-upload" class="form-control form-control-sm" accept="image/png, image/jpeg, image/gif">
+                        </div>
+                        <div id="image-camera-group" class="mb-3" style="display: none;">
+                            <div class="d-grid">
+                                <button type="button" id="camera-capture-btn" class="btn btn-outline-success">
+                                    <i class="bi bi-camera-fill"></i> カメラを起動して撮影
+                                </button>
+                            </div>
+                            <input type="file" id="plant-image-camera" name="plant-image-camera" class="d-none" accept="image/*" capture="environment">
                         </div>
                         <hr>
 

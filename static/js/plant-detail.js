@@ -6,7 +6,11 @@
  */
 function renderMonthlyClimateChart(canvas) {
     if (!canvas) return;
-    
+
+    // 既存チャートがあれば破棄
+    const existingChart = Chart.getChart(canvas);
+    if (existingChart) existingChart.destroy();
+
     const tempsDataString = canvas.dataset.monthlyTemps;
     if (!tempsDataString || tempsDataString === 'null') {
         console.log("No monthly climate data to render.");
@@ -102,14 +106,35 @@ function initializeDetailCharts() {
                 analysisDatePicker.value = initialDate;
             }
 
+            const analysisFitBtn = pageContainer.querySelector(`.analysis-temp-fit-btn[data-plant-id="${managedPlantId}"]`);
+            const analysisTempMinInput = pageContainer.querySelector(`.analysis-temp-min[data-plant-id="${managedPlantId}"]`);
+            const analysisTempMaxInput = pageContainer.querySelector(`.analysis-temp-max[data-plant-id="${managedPlantId}"]`);
+
+            const applyAnalysisTempRange = (chart, minVal, maxVal) => {
+                if (!chart || !chart.options.scales.y_temp) return;
+                chart.options.scales.y_temp.min = minVal;
+                chart.options.scales.y_temp.max = maxVal;
+                chart.update('none');
+            };
+
+            const resetAnalysisFit = () => {
+                if (analysisFitBtn) {
+                    analysisFitBtn.classList.remove('active');
+                    analysisFitBtn.classList.replace('btn-info', 'btn-outline-info');
+                }
+                if (analysisTempMinInput) analysisTempMinInput.value = '';
+                if (analysisTempMaxInput) analysisTempMaxInput.value = '';
+            };
+
             const updateChartFromAnalysisControls = () => {
                 const selectedPeriodButton = pageContainer.querySelector(`.analysis-period-btn[data-plant-id="${managedPlantId}"].active`);
                 if (!selectedPeriodButton) return;
                 const selectedPeriod = selectedPeriodButton.dataset.period;
                 const selectedDate = analysisDatePicker ? analysisDatePicker.value : initialDate;
                 updateAnalysisHistoryChart(managedPlantId, selectedPeriod, analysisChartInstances, selectedDate);
+                resetAnalysisFit();
             };
-            
+
             updateAnalysisHistoryChart(managedPlantId, '7d', analysisChartInstances, initialDate);
 
             pageContainer.querySelectorAll('.analysis-period-btn').forEach(button => {
@@ -153,6 +178,70 @@ function initializeDetailCharts() {
                     }
                 });
             }
+
+            // Fitボタン: 温度軸をデータ範囲 ±5°C に調整
+            if (analysisFitBtn) {
+                analysisFitBtn.addEventListener('click', () => {
+                    const chart = analysisChartInstances[managedPlantId];
+                    if (!chart) return;
+
+                    const isFitted = analysisFitBtn.classList.contains('active');
+
+                    if (isFitted) {
+                        resetAnalysisFit();
+                        applyAnalysisTempRange(chart, undefined, undefined);
+                    } else {
+                        const tempDataLabels = [
+                            'Daily Temp Avg', 'Daily Temp Min', 'Daily Temp Max',
+                            'Avg Soil Temp1 (°C)', 'Daily Soil Temp1 Min', 'Daily Soil Temp1 Max',
+                            'Avg Soil Temp2 (°C)', 'Daily Soil Temp2 Min', 'Daily Soil Temp2 Max'
+                        ];
+                        let tempMin = Infinity;
+                        let tempMax = -Infinity;
+                        chart.data.datasets.forEach(ds => {
+                            if (ds.yAxisID === 'y_temp' && ds.data && tempDataLabels.includes(ds.label)) {
+                                ds.data.forEach(val => {
+                                    if (val !== null && val !== undefined && isFinite(val)) {
+                                        if (val < tempMin) tempMin = val;
+                                        if (val > tempMax) tempMax = val;
+                                    }
+                                });
+                            }
+                        });
+
+                        if (isFinite(tempMin) && isFinite(tempMax)) {
+                            const calcMin = Math.floor(tempMin - 5);
+                            const calcMax = Math.ceil(tempMax + 5);
+                            if (analysisTempMinInput) analysisTempMinInput.value = calcMin;
+                            if (analysisTempMaxInput) analysisTempMaxInput.value = calcMax;
+                            analysisFitBtn.classList.add('active');
+                            analysisFitBtn.classList.replace('btn-outline-info', 'btn-info');
+                            applyAnalysisTempRange(chart, calcMin, calcMax);
+                        }
+                    }
+                });
+            }
+
+            // Min/Max入力: 手動で温度範囲を設定
+            const onAnalysisTempRangeInput = () => {
+                const chart = analysisChartInstances[managedPlantId];
+                if (!chart) return;
+
+                const minVal = analysisTempMinInput && analysisTempMinInput.value !== '' ? Number(analysisTempMinInput.value) : undefined;
+                const maxVal = analysisTempMaxInput && analysisTempMaxInput.value !== '' ? Number(analysisTempMaxInput.value) : undefined;
+
+                if (minVal === undefined && maxVal === undefined) {
+                    if (analysisFitBtn) {
+                        analysisFitBtn.classList.remove('active');
+                        analysisFitBtn.classList.replace('btn-info', 'btn-outline-info');
+                    }
+                }
+
+                applyAnalysisTempRange(chart, minVal, maxVal);
+            };
+
+            if (analysisTempMinInput) analysisTempMinInput.addEventListener('change', onAnalysisTempRangeInput);
+            if (analysisTempMaxInput) analysisTempMaxInput.addEventListener('change', onAnalysisTempRangeInput);
         }
     }
 
@@ -167,15 +256,25 @@ function initializeDetailCharts() {
         }
         
         updateSensorHistoryChart(deviceId, '24h', sensorChartInstances, initialDate);
-    
+
         const updateChartFromSensorControls = () => {
             const selectedPeriodButton = pageContainer.querySelector(`.period-btn[data-device-id="${deviceId}"].active`);
             if (!selectedPeriodButton) return;
             const selectedPeriod = selectedPeriodButton.dataset.period;
             const selectedDate = datePicker ? datePicker.value : new Date().toISOString().split('T')[0];
             updateSensorHistoryChart(deviceId, selectedPeriod, sensorChartInstances, selectedDate);
+            // Fitモードと温度範囲入力をリセット
+            const fitBtnReset = pageContainer.querySelector(`.sensor-temp-fit-btn[data-device-id="${deviceId}"]`);
+            if (fitBtnReset) {
+                fitBtnReset.classList.remove('active');
+                fitBtnReset.classList.replace('btn-info', 'btn-outline-info');
+            }
+            const tempMinReset = pageContainer.querySelector(`.sensor-temp-min[data-device-id="${deviceId}"]`);
+            const tempMaxReset = pageContainer.querySelector(`.sensor-temp-max[data-device-id="${deviceId}"]`);
+            if (tempMinReset) tempMinReset.value = '';
+            if (tempMaxReset) tempMaxReset.value = '';
         };
-    
+
         pageContainer.querySelectorAll(`.period-btn[data-device-id="${deviceId}"]`).forEach(button => {
             button.addEventListener('click', (e) => {
                 pageContainer.querySelectorAll(`.period-btn[data-device-id="${deviceId}"]`).forEach(btn => btn.classList.remove('active'));
@@ -183,10 +282,91 @@ function initializeDetailCharts() {
                 updateChartFromSensorControls();
             });
         });
-    
+
         if (datePicker) {
             datePicker.addEventListener('change', updateChartFromSensorControls);
         }
+
+        // 温度範囲コントロール: Fitボタン + Min/Max入力
+        const fitBtn = pageContainer.querySelector(`.sensor-temp-fit-btn[data-device-id="${deviceId}"]`);
+        const tempMinInput = pageContainer.querySelector(`.sensor-temp-min[data-device-id="${deviceId}"]`);
+        const tempMaxInput = pageContainer.querySelector(`.sensor-temp-max[data-device-id="${deviceId}"]`);
+
+        const applyTempRange = (chart, minVal, maxVal) => {
+            if (!chart || !chart.options.scales.y_temp) return;
+            chart.options.scales.y_temp.min = minVal;
+            chart.options.scales.y_temp.max = maxVal;
+            chart.update('none');
+        };
+
+        if (fitBtn) {
+            fitBtn.addEventListener('click', () => {
+                const chart = sensorChartInstances[deviceId];
+                if (!chart) return;
+
+                const isFitted = fitBtn.classList.contains('active');
+
+                if (isFitted) {
+                    // 自動スケールに戻す
+                    if (tempMinInput) tempMinInput.value = '';
+                    if (tempMaxInput) tempMaxInput.value = '';
+                    fitBtn.classList.remove('active');
+                    fitBtn.classList.replace('btn-info', 'btn-outline-info');
+                    applyTempRange(chart, undefined, undefined);
+                } else {
+                    // センサーデータのみから最大/最小を計算
+                    const tempDataLabels = [
+                        'Temperature (°C)', 'Temp Min', 'Temp Max',
+                        'Soil Temp1 (°C)', 'Soil Temp1 Min', 'Soil Temp1 Max',
+                        'Soil Temp2 (°C)', 'Soil Temp2 Min', 'Soil Temp2 Max'
+                    ];
+                    let tempMin = Infinity;
+                    let tempMax = -Infinity;
+                    chart.data.datasets.forEach(ds => {
+                        if (ds.yAxisID === 'y_temp' && ds.data && tempDataLabels.includes(ds.label)) {
+                            ds.data.forEach(val => {
+                                if (val !== null && val !== undefined && isFinite(val)) {
+                                    if (val < tempMin) tempMin = val;
+                                    if (val > tempMax) tempMax = val;
+                                }
+                            });
+                        }
+                    });
+
+                    if (isFinite(tempMin) && isFinite(tempMax)) {
+                        const calcMin = Math.floor(tempMin - 5);
+                        const calcMax = Math.ceil(tempMax + 5);
+                        if (tempMinInput) tempMinInput.value = calcMin;
+                        if (tempMaxInput) tempMaxInput.value = calcMax;
+                        fitBtn.classList.add('active');
+                        fitBtn.classList.replace('btn-outline-info', 'btn-info');
+                        applyTempRange(chart, calcMin, calcMax);
+                    }
+                }
+            });
+        }
+
+        // Min/Max入力: 手動で温度範囲を設定
+        const onTempRangeInput = () => {
+            const chart = sensorChartInstances[deviceId];
+            if (!chart) return;
+
+            const minVal = tempMinInput && tempMinInput.value !== '' ? Number(tempMinInput.value) : undefined;
+            const maxVal = tempMaxInput && tempMaxInput.value !== '' ? Number(tempMaxInput.value) : undefined;
+
+            // 両方空なら自動スケール、Fitボタンもリセット
+            if (minVal === undefined && maxVal === undefined) {
+                if (fitBtn) {
+                    fitBtn.classList.remove('active');
+                    fitBtn.classList.replace('btn-info', 'btn-outline-info');
+                }
+            }
+
+            applyTempRange(chart, minVal, maxVal);
+        };
+
+        if (tempMinInput) tempMinInput.addEventListener('change', onTempRangeInput);
+        if (tempMaxInput) tempMaxInput.addEventListener('change', onTempRangeInput);
     }
 
     // --- Native Climate Chart (Plant Detail Page Only) ---
@@ -196,7 +376,7 @@ function initializeDetailCharts() {
     }
 }
 
-document.addEventListener('DOMContentLoaded', initializeDetailCharts);
+// initializeDetailCharts is called from main.js
 
 
 /**
@@ -210,7 +390,11 @@ async function updateAnalysisHistoryChart(managedPlantId, period, chartInstances
     
     if (chartInstances[managedPlantId]) {
         chartInstances[managedPlantId].destroy();
+        delete chartInstances[managedPlantId];
     }
+    // 安全策: Chart.getChartでも破棄
+    const existingAnalysisChart = Chart.getChart(canvas);
+    if (existingAnalysisChart) existingAnalysisChart.destroy();
 
     loader.classList.remove('d-none');
     canvas.style.visibility = 'hidden';
@@ -435,7 +619,11 @@ async function updateSensorHistoryChart(deviceId, period, chartInstances, select
 
     if (chartInstances[deviceId]) {
         chartInstances[deviceId].destroy();
+        delete chartInstances[deviceId];
     }
+    // 安全策: Chart.getChartでも破棄
+    const existingSensorChart = Chart.getChart(canvas);
+    if (existingSensorChart) existingSensorChart.destroy();
 
     loader.classList.remove('d-none');
     canvas.style.visibility = 'hidden';

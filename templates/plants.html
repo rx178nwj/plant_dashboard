@@ -36,11 +36,29 @@
                 <div class="card-body">
                     <form id="plant-form" enctype="multipart/form-data">
                         <input type="hidden" id="plant-id" name="plant_id">
+
+                        <!-- 品種検索セクション -->
+                        <div class="card bg-light mb-3">
+                            <div class="card-body py-2">
+                                <div class="row align-items-center">
+                                    <div class="col">
+                                        <div class="input-group">
+                                            <span class="input-group-text"><i class="bi bi-search"></i></span>
+                                            <input type="text" id="variety-search-input" class="form-control" placeholder="品種名を入力して検索（例: 朧月、グラプトペタルム、ブルーレジーナ）">
+                                            <button type="button" id="variety-search-btn" class="btn btn-primary">
+                                                <i class="bi bi-robot"></i> 品種を検索
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
                         <div class="row align-items-end">
                             <div class="col-md-3"><label class="form-label">Genus</label><input type="text" id="genus" name="genus" class="form-control"></div>
                             <div class="col-md-3"><label class="form-label">Species</label><input type="text" id="species" name="species" class="form-control"></div>
                             <div class="col-md-3"><label class="form-label">Variety</label><input type="text" id="variety" name="variety" class="form-control"></div>
-                            <div class="col-md-3"><button type="button" id="ai-lookup-btn" class="btn btn-info w-100"><i class="bi bi-robot"></i> Search with AI</button></div>
+                            <div class="col-md-3"><button type="button" id="ai-lookup-btn" class="btn btn-info w-100"><i class="bi bi-magic"></i> 詳細情報を取得</button></div>
                         </div>
                         <hr>
                         <h6><i class="bi bi-image"></i> Plant Image</h6>
@@ -50,11 +68,15 @@
                         <div class="mb-3">
                             <div class="form-check form-check-inline">
                                 <input class="form-check-input" type="radio" name="image-source" id="image-source-url" value="url" checked>
-                                <label class="form-check-label" for="image-source-url">Web URL</label>
+                                <label class="form-check-label" for="image-source-url"><i class="bi bi-link-45deg"></i> Web URL</label>
                             </div>
                             <div class="form-check form-check-inline">
                                 <input class="form-check-input" type="radio" name="image-source" id="image-source-upload" value="upload">
-                                <label class="form-check-label" for="image-source-upload">Upload from PC</label>
+                                <label class="form-check-label" for="image-source-upload"><i class="bi bi-folder2-open"></i> ファイル選択</label>
+                            </div>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="radio" name="image-source" id="image-source-camera" value="camera">
+                                <label class="form-check-label" for="image-source-camera"><i class="bi bi-camera-fill"></i> カメラで撮影</label>
                             </div>
                         </div>
                         <div id="image-url-group" class="mb-3">
@@ -62,6 +84,14 @@
                         </div>
                         <div id="image-upload-group" class="mb-3" style="display: none;">
                             <input type="file" id="plant-image-upload" name="plant-image-upload" class="form-control form-control-sm" accept="image/png, image/jpeg, image/gif">
+                        </div>
+                        <div id="image-camera-group" class="mb-3" style="display: none;">
+                            <div class="d-grid">
+                                <button type="button" id="camera-capture-btn" class="btn btn-outline-success">
+                                    <i class="bi bi-camera-fill"></i> カメラを起動して撮影
+                                </button>
+                            </div>
+                            <input type="file" id="plant-image-camera" name="plant-image-camera" class="d-none" accept="image/*" capture="environment">
                         </div>
                         
                         <div class="row">
@@ -153,6 +183,33 @@
     position: absolute;
 }
 </style>
+
+<!-- 品種検索結果モーダル -->
+<div class="modal fade" id="variety-search-modal" tabindex="-1" aria-labelledby="varietySearchModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="varietySearchModalLabel"><i class="bi bi-robot"></i> 品種検索結果</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="variety-search-loading" class="text-center py-5" style="display: none;">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Searching...</span>
+                    </div>
+                    <p class="mt-3 text-muted">AIが品種を検索中です...</p>
+                </div>
+                <div id="variety-search-error" class="alert alert-danger" style="display: none;"></div>
+                <div id="variety-search-results" class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-3">
+                    <!-- 検索結果がここに表示されます -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+            </div>
+        </div>
+    </div>
+</div>
 
 <script id="server-data" type="application/json">
     {{ plants_json | safe }}

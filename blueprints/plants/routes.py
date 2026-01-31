@@ -129,6 +129,184 @@ def api_upload_image():
         return jsonify({'success': False, 'message': 'File type not allowed'}), 400
 
 
+@plants_bp.route('/api/plants/search-variety', methods=['POST'])
+@requires_auth
+def api_search_variety():
+    """品種名からAIを使用して候補リストを検索します。"""
+    data = request.json
+    variety_name = data.get('variety_name', '').strip()
+
+    logger.info(f"Variety search request for: {variety_name}")
+
+    if not variety_name:
+        return jsonify({'success': False, 'message': '品種名を入力してください。'}), 400
+
+    try:
+        api_key = current_app.config.get('ANTHROPIC_API_KEY')
+        if not api_key:
+            logger.error("Anthropic API key is not configured.")
+            return jsonify({'success': False, 'message': 'APIキーが設定されていません。'}), 500
+
+        prompt = f"""ユーザーが入力した植物の品種名「{variety_name}」から、該当する可能性のある植物を最大5件検索してください。
+
+入力された名前は以下のいずれかの可能性があります：
+- 日本語の流通名・園芸名（例：朧月、黒法師、ブルーレジーナ）
+- 学名の一部（例：Graptopetalum、Echeveria）
+- 英語の通称（例：Ghost Plant、Black Rose）
+
+各候補について、以下の情報を提供してください：
+
+1. genus: 属名（ラテン語の学名、例: Graptopetalum）
+2. species: 種小名（ラテン語の学名、例: paraguayense）
+3. variety: 品種名または園芸品種名（日本語で一般的な流通名があればそれを優先）
+4. common_name: 一般的な呼び名（日本語）
+5. description: 簡潔な説明（日本語、50文字以内）
+6. search_query_ja: 日本の通販サイト（楽天、メルカリ等）で検索するための日本語クエリ（例：「多肉植物 朧月」「エケベリア ブルーレジーナ」）
+7. image_url: この植物の代表的な画像URL（Wikimedia Commons、iNaturalist、または信頼できる植物データベースから直接リンク可能な画像URL）
+
+重要：
+- 入力が曖昧な場合は、最も一般的な解釈を優先してください
+- 同じ属の異なる種がある場合は、人気のある品種を含めてください
+- varietyが特にない一般種の場合は、varietyフィールドは空文字にしてください
+- search_query_jaは日本の園芸通販サイトで使われる一般的な呼び名を使用してください
+- image_urlはWikimedia CommonsやiNaturalistなど、直接埋め込み可能な画像URLを優先してください。見つからない場合はnullにしてください
+
+JSON形式で回答してください：
+{{
+  "candidates": [
+    {{
+      "genus": "string",
+      "species": "string",
+      "variety": "string",
+      "common_name": "string",
+      "description": "string",
+      "search_query_ja": "string",
+      "image_url": "string or null"
+    }}
+  ]
+}}"""
+
+        api_url = "https://api.anthropic.com/v1/messages"
+        headers = {
+            "x-api-key": api_key,
+            "anthropic-version": "2023-06-01",
+            "content-type": "application/json"
+        }
+
+        payload = {
+            "model": "claude-sonnet-4-5-20250929",
+            "max_tokens": 4000,
+            "temperature": 0.3,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ]
+        }
+
+        logger.info("Sending variety search request to Claude API...")
+
+        with httpx.Client(timeout=60.0) as client:
+            response = client.post(api_url, headers=headers, json=payload)
+
+            if response.status_code != 200:
+                logger.error(f"API Error Response: {response.text}")
+                response.raise_for_status()
+
+            result = response.json()
+
+        content = result['content'][0]['text'].strip()
+
+        # JSONブロックの抽出
+        if content.startswith("```json"):
+            content = content[7:]
+            if content.endswith("```"):
+                content = content[:-3]
+        elif content.startswith("```"):
+            content = content[3:]
+            if content.endswith("```"):
+                content = content[:-3]
+
+        content = content.strip()
+        response_data = json.loads(content)
+
+        logger.info(f"Found {len(response_data.get('candidates', []))} candidates")
+        return jsonify({'success': True, 'data': response_data})
+
+    except httpx.HTTPStatusError as e:
+        logger.error(f"Claude API error: {e.response.status_code}")
+        return jsonify({'success': False, 'message': f'AI service error ({e.response.status_code})'}), 500
+    except Exception as e:
+        logger.error(f"Unexpected error in variety search: {e}", exc_info=True)
+        return jsonify({'success': False, 'message': f'エラー: {str(e)}'}), 500
+
+
+@plants_bp.route('/api/translate', methods=['POST'])
+@requires_auth
+def api_translate():
+    """AIモデルを使用してテキストを翻訳します。"""
+    data = request.json
+    text_to_translate = data.get('text', '').strip()
+    target_lang = data.get('target_lang', 'English').strip()
+
+    if not text_to_translate:
+        return jsonify({'success': False, 'message': 'Text to translate is required.'}), 400
+
+    try:
+        api_key = current_app.config.get('ANTHROPIC_API_KEY')
+        if not api_key:
+            logger.error("Anthropic API key is not configured.")
+            return jsonify({'success': False, 'message': 'API key is not configured.'}), 500
+
+        prompt = f"""Translate the following text into {target_lang}. Provide only the translated text as a raw string, with no additional explanation, formatting, or quotation marks.
+
+Text to translate: "{text_to_translate}"
+"""
+
+        api_url = "https://api.anthropic.com/v1/messages"
+        headers = {
+            "x-api-key": api_key,
+            "anthropic-version": "2023-06-01",
+            "content-type": "application/json"
+        }
+
+        payload = {
+            "model": "claude-sonnet-4-5-20250929",
+            "max_tokens": 1024,
+            "temperature": 0,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ]
+        }
+
+        logger.info(f"Sending translation request for '{text_to_translate}' to Claude API...")
+
+        with httpx.Client(timeout=20.0) as client:
+            response = client.post(api_url, headers=headers, json=payload)
+
+            if response.status_code != 200:
+                logger.error(f"API Error Response: {response.text}")
+                response.raise_for_status()
+
+            result = response.json()
+
+        translated_text = result['content'][0]['text'].strip()
+
+        logger.info(f"Translation successful: '{text_to_translate}' -> '{translated_text}'")
+        return jsonify({'success': True, 'translated_text': translated_text})
+
+    except httpx.HTTPStatusError as e:
+        logger.error(f"Claude API error during translation: {e.response.status_code}")
+        return jsonify({'success': False, 'message': f'AI service error ({e.response.status_code})'}), 500
+    except Exception as e:
+        logger.error(f"Unexpected error during translation: {e}", exc_info=True)
+        return jsonify({'success': False, 'message': f'Error: {str(e)}'}), 500
+
+
 @plants_bp.route('/api/plants/lookup', methods=['POST'])
 @requires_auth
 def api_plant_lookup():
@@ -432,4 +610,106 @@ def delete_plant(plant_id):
         conn.close()
         return jsonify({'success': True, 'message': 'Plant deleted successfully.'})
     except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+def contains_japanese(text):
+    """テキストに日本語が含まれているかチェック"""
+    for char in text:
+        if '\u3040' <= char <= '\u309f' or '\u30a0' <= char <= '\u30ff' or '\u4e00' <= char <= '\u9fff':
+            return True
+    return False
+
+
+def translate_to_english(text, api_key):
+    """日本語テキストを英語に翻訳（植物名用）"""
+    try:
+        translate_prompt = f"Translate this plant name to English (botanical/scientific terms preferred). Return only the translated text, no explanation: {text}"
+        translate_url = "https://api.anthropic.com/v1/messages"
+        headers = {
+            "x-api-key": api_key,
+            "anthropic-version": "2023-06-01",
+            "content-type": "application/json"
+        }
+        payload = {
+            "model": "claude-sonnet-4-5-20250929",
+            "max_tokens": 100,
+            "temperature": 0,
+            "messages": [{"role": "user", "content": translate_prompt}]
+        }
+        with httpx.Client(timeout=10.0) as client:
+            resp = client.post(translate_url, headers=headers, json=payload)
+            if resp.status_code == 200:
+                translated = resp.json()['content'][0]['text'].strip()
+                logger.info(f"Translated: {text} -> {translated}")
+                return translated
+    except Exception as e:
+        logger.warning(f"Translation failed: {e}")
+    return text
+
+
+@plants_bp.route('/api/plants/search-image', methods=['POST'])
+@requires_auth
+def api_search_image():
+    """Wikimedia Commons APIを使用して植物画像を検索します。"""
+    data = request.json
+    genus = data.get('genus', '').strip()
+    species = data.get('species', '').strip()
+    variety = data.get('variety', '').strip()
+
+    if not genus:
+        return jsonify({'success': False, 'message': 'Genus is required'}), 400
+
+    # 検索クエリを構築（variety含む）
+    search_query = f"{genus} {species}".strip()
+    if variety:
+        search_query = f"{search_query} {variety}"
+
+    # 日本語が含まれている場合は英語に翻訳
+    if contains_japanese(search_query):
+        api_key = current_app.config.get('ANTHROPIC_API_KEY')
+        if api_key:
+            search_query = translate_to_english(search_query, api_key)
+
+    logger.info(f"Searching Wikimedia Commons for: {search_query}")
+
+    try:
+        # Wikimedia Commons API でファイル検索
+        api_url = "https://commons.wikimedia.org/w/api.php"
+        params = {
+            "action": "query",
+            "generator": "search",
+            "gsrnamespace": "6",  # File namespace
+            "gsrsearch": f"filetype:bitmap {search_query}",
+            "gsrlimit": "5",
+            "prop": "imageinfo",
+            "iiprop": "url|mime",
+            "iiurlwidth": "400",  # サムネイルサイズ
+            "format": "json"
+        }
+
+        with httpx.Client(timeout=15.0) as client:
+            response = client.get(api_url, params=params)
+            response.raise_for_status()
+            result = response.json()
+
+        pages = result.get('query', {}).get('pages', {})
+
+        for page_id, page_data in pages.items():
+            imageinfo = page_data.get('imageinfo', [])
+            if imageinfo:
+                info = imageinfo[0]
+                mime = info.get('mime', '')
+                # JPEG/PNG画像のみ
+                if mime in ['image/jpeg', 'image/png']:
+                    thumb_url = info.get('thumburl') or info.get('url')
+                    if thumb_url:
+                        logger.info(f"Found image: {thumb_url}")
+                        return jsonify({'success': True, 'image_url': thumb_url})
+
+        logger.info(f"No suitable image found for: {search_query}")
+        return jsonify({'success': False, 'message': 'No image found'})
+
+    except Exception as e:
+        logger.error(f"Error searching Wikimedia Commons: {e}")
         return jsonify({'success': False, 'message': str(e)}), 500

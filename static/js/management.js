@@ -17,6 +17,10 @@ function initializeManagementDashboard() {
         const source = document.querySelector('input[name="image-source"]:checked').value;
         document.getElementById('image-url-group').style.display = (source === 'url') ? 'block' : 'none';
         document.getElementById('image-upload-group').style.display = (source === 'upload') ? 'block' : 'none';
+        const cameraGroup = document.getElementById('image-camera-group');
+        if (cameraGroup) {
+            cameraGroup.style.display = (source === 'camera') ? 'block' : 'none';
+        }
     };
 
     const loadManagedPlants = async () => {
@@ -70,13 +74,18 @@ function initializeManagementDashboard() {
         };
         const imageSource = document.querySelector('input[name="image-source"]:checked').value;
         const imageFile = imageUploadInput.files[0];
+        const cameraFile = document.getElementById('plant-image-camera')?.files[0];
 
         savePlantBtn.disabled = true;
         savePlantBtn.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Saving...`;
         try {
-            if (imageSource === 'upload' && imageFile) {
+            // 画像アップロードまたはカメラ撮影の場合、先に画像をアップロード
+            const fileToUpload = (imageSource === 'upload' && imageFile) ? imageFile :
+                                 (imageSource === 'camera' && cameraFile) ? cameraFile : null;
+
+            if (fileToUpload) {
                 const formData = new FormData();
-                formData.append('plant-image-upload', imageFile);
+                formData.append('plant-image-upload', fileToUpload);
                 const uploadResponse = await fetch('/api/plants/upload-image', {
                     method: 'POST',
                     body: formData
@@ -171,6 +180,29 @@ function initializeManagementDashboard() {
             reader.readAsDataURL(file);
         }
     });
+
+    // カメラ撮影
+    const cameraCaptureBtn = document.getElementById('camera-capture-btn');
+    const cameraInput = document.getElementById('plant-image-camera');
+
+    if (cameraCaptureBtn && cameraInput) {
+        // ボタンクリックでカメラ入力をトリガー
+        cameraCaptureBtn.addEventListener('click', () => {
+            cameraInput.click();
+        });
+
+        // カメラで撮影した画像を処理
+        cameraInput.addEventListener('change', () => {
+            const file = cameraInput.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    imagePreview.src = e.target.result;
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+    }
 
     loadManagedPlants();
 }

@@ -20,6 +20,18 @@ function initializePlantLibrary() {
     const monthlyTempsTbody = document.getElementById('monthly-temps-tbody');
     const originCountryInput = document.getElementById('origin-country');
     const originRegionInput = document.getElementById('origin-region');
+
+    // 品種検索UI要素
+    const varietySearchInput = document.getElementById('variety-search-input');
+    const varietySearchBtn = document.getElementById('variety-search-btn');
+    const varietySearchModal = document.getElementById('variety-search-modal');
+    const varietySearchLoading = document.getElementById('variety-search-loading');
+    const varietySearchError = document.getElementById('variety-search-error');
+    const varietySearchResults = document.getElementById('variety-search-results');
+    let varietyModal = null;
+    if (varietySearchModal) {
+        varietyModal = new bootstrap.Modal(varietySearchModal);
+    }
     
     // 埋め込まれたJSONデータを安全に読み込む
     const serverDataElement = document.getElementById('server-data');
@@ -34,6 +46,10 @@ function initializePlantLibrary() {
         const source = document.querySelector('input[name="image-source"]:checked').value;
         document.getElementById('image-url-group').style.display = (source === 'url') ? 'block' : 'none';
         document.getElementById('image-upload-group').style.display = (source === 'upload') ? 'block' : 'none';
+        const cameraGroup = document.getElementById('image-camera-group');
+        if (cameraGroup) {
+            cameraGroup.style.display = (source === 'camera') ? 'block' : 'none';
+        }
     };
 
     // 地図を更新する関数
@@ -251,15 +267,19 @@ function initializePlantLibrary() {
         const plantData = formToJSON(plantForm);
         const imageSource = document.querySelector('input[name="image-source"]:checked').value;
         const imageFile = imageUploadInput.files[0];
+        const cameraFile = document.getElementById('plant-image-camera')?.files[0];
 
         savePlantBtn.disabled = true;
         savePlantBtn.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Saving...`;
 
         try {
-            // 画像アップロードが選択されている場合、先に画像をアップロード
-            if (imageSource === 'upload' && imageFile) {
+            // 画像アップロードまたはカメラ撮影の場合、先に画像をアップロード
+            const fileToUpload = (imageSource === 'upload' && imageFile) ? imageFile :
+                                 (imageSource === 'camera' && cameraFile) ? cameraFile : null;
+
+            if (fileToUpload) {
                 const formData = new FormData();
-                formData.append('plant-image-upload', imageFile);
+                formData.append('plant-image-upload', fileToUpload);
                 const uploadResponse = await fetch('/api/plants/upload-image', {
                     method: 'POST',
                     body: formData
@@ -320,6 +340,215 @@ function initializePlantLibrary() {
         }
     });
     
+    // 品種検索ボタン
+    if (varietySearchBtn) {
+        varietySearchBtn.addEventListener('click', async () => {
+            const searchQuery = varietySearchInput.value.trim();
+            if (!searchQuery) {
+                showAlert('warning', '品種名を入力してください。', 'main-alert-box');
+                return;
+            }
+
+            // モーダルを開く
+            varietySearchLoading.style.display = 'block';
+            varietySearchError.style.display = 'none';
+            varietySearchResults.innerHTML = '';
+            varietyModal.show();
+
+            varietySearchBtn.disabled = true;
+            varietySearchBtn.innerHTML = `<span class="spinner-border spinner-border-sm"></span> 検索中...`;
+
+            try {
+                const response = await fetch('/api/plants/search-variety', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ variety_name: searchQuery })
+                });
+                const result = await response.json();
+
+                varietySearchLoading.style.display = 'none';
+
+                if (result.success && result.data.candidates && result.data.candidates.length > 0) {
+                    renderVarietyCandidates(result.data.candidates);
+                } else {
+                    varietySearchError.textContent = result.message || '候補が見つかりませんでした。';
+                    varietySearchError.style.display = 'block';
+                }
+            } catch (error) {
+                varietySearchLoading.style.display = 'none';
+                varietySearchError.textContent = `エラー: ${error.message}`;
+                varietySearchError.style.display = 'block';
+            } finally {
+                varietySearchBtn.disabled = false;
+                varietySearchBtn.innerHTML = '<i class="bi bi-robot"></i> 品種を検索';
+            }
+        });
+
+        // Enterキーで検索
+        varietySearchInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                varietySearchBtn.click();
+            }
+        });
+    }
+
+    // Wikimedia Commons APIから画像を取得する関数
+    const fetchPlantImage = async (genus, species, variety = '') => {
+        try {
+            const response = await fetch('/api/plants/search-image', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ genus, species, variety })
+            });
+            const result = await response.json();
+            if (result.success && result.image_url) {
+                return result.image_url;
+            }
+        } catch (error) {
+            console.error('Error fetching plant image:', error);
+        }
+        return null;
+    };
+
+    // ヘルパー関数: テキストを翻訳
+    const translateText = async (text, targetLang = 'English') => {
+        if (!text) return '';
+        try {
+            const response = await fetch('/api/translate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text: text, target_lang: targetLang })
+            });
+            if (!response.ok) {
+                throw new Error(`Translation API failed with status ${response.status}`);
+            }
+            const result = await response.json();
+            if (result.success && result.translated_text) {
+                return result.translated_text;
+            }
+            return text; // 翻訳失敗時は原文を返す
+        } catch (error) {
+            console.error('Translation error:', error);
+            return text; // エラー時も原文を返す
+        }
+    };
+
+    // 候補リストを描画する関数
+    const renderVarietyCandidates = (candidates) => {
+        varietySearchResults.innerHTML = '';
+
+        candidates.forEach((candidate, index) => {
+            const fullName = `${candidate.genus} ${candidate.species}${candidate.variety ? ' ' + candidate.variety : ''}`;
+            const searchQueryJa = candidate.search_query_ja || candidate.common_name || fullName;
+            const rakutenUrl = `https://search.rakuten.co.jp/search/mall/${encodeURIComponent(searchQueryJa)}/`;
+            const mercariUrl = `https://jp.mercari.com/search?keyword=${encodeURIComponent(searchQueryJa)}`;
+            
+            // 初期Google画像検索URL（品種名なし）
+            let googleImageUrl = `https://www.google.com/search?tbm=isch&q=${encodeURIComponent(candidate.genus + ' ' + candidate.species)}`;
+
+            const initialImageUrl = candidate.image_url || `https://placehold.co/300x200/6c757d/white?text=Loading...`;
+
+            const cardHtml = `
+                <div class="col">
+                    <div class="card h-100 variety-candidate-card" data-index="${index}">
+                        <div class="card-header bg-success text-white text-center py-2">
+                            <div class="fst-italic">${candidate.genus}</div>
+                            <div class="fw-bold">${candidate.species}</div>
+                            ${candidate.variety ? `<div class="small">'${candidate.variety}'</div>` : ''}
+                        </div>
+                        <div class="card-body p-2">
+                            ${candidate.common_name ? `<h6 class="card-title mb-1 text-center">${candidate.common_name}</h6>` : ''}
+                            <p class="card-text small text-muted mb-2">${candidate.description || ''}</p>
+                            <div class="text-center mb-2">
+                                <a href="${googleImageUrl}" target="_blank" rel="noopener noreferrer" class="d-inline-block">
+                                    <img id="candidate-img-${index}" src="${initialImageUrl}" alt="${fullName}"
+                                         class="img-fluid rounded" style="max-height: 120px; object-fit: cover;"
+                                         onerror="setNoImageFallback(this, '${googleImageUrl}', '${candidate.genus}')">
+                                </a>
+                            </div>
+                            <div class="btn-group btn-group-sm w-100" role="group">
+                                <a href="${rakutenUrl}" target="_blank" class="btn btn-outline-danger search-link" onclick="event.stopPropagation();" title="楽天で確認">
+                                    <i class="bi bi-cart"></i> 楽天
+                                </a>
+                                <a href="${mercariUrl}" target="_blank" class="btn btn-outline-primary search-link" onclick="event.stopPropagation();" title="メルカリで確認">
+                                    <i class="bi bi-bag"></i> メルカリ
+                                </a>
+                                <a href="${googleImageUrl}" id="google-image-link-${index}" target="_blank" class="btn btn-outline-secondary search-link" onclick="event.stopPropagation();" title="画像検索">
+                                    <i class="bi bi-images"></i> 画像
+                                </a>
+                            </div>
+                        </div>
+                        <div class="card-footer p-2">
+                            <button class="btn btn-primary btn-sm w-100 select-variety-btn">
+                                <i class="bi bi-check-lg"></i> この品種を選択
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            varietySearchResults.insertAdjacentHTML('beforeend', cardHtml);
+
+            // 品種名を非同期で翻訳し、Google画像検索リンクを更新
+            if (candidate.variety) {
+                translateText(candidate.variety).then(translatedVariety => {
+                    const updatedQuery = `${candidate.genus} ${candidate.species} ${translatedVariety}`;
+                    const updatedGoogleImageUrl = `https://www.google.com/search?tbm=isch&q=${encodeURIComponent(updatedQuery)}`;
+                    const linkEl = document.getElementById(`google-image-link-${index}`);
+                    if (linkEl) {
+                        linkEl.href = updatedGoogleImageUrl;
+
+                        // 画像プレビューのリンクとエラー時のリンクも更新
+                        const imgLinkEl = linkEl.closest('.card-body').querySelector('a');
+                        const imgEl = document.getElementById(`candidate-img-${index}`);
+                        if (imgLinkEl) imgLinkEl.href = updatedGoogleImageUrl;
+                        if (imgEl) imgEl.setAttribute('onerror', `setNoImageFallback(this, '${updatedGoogleImageUrl}', '${candidate.genus}')`);
+                    }
+                });
+            }
+
+            // AIから画像URLがなければ、Wikimedia Commonsから非同期で取得
+            if (!candidate.image_url) {
+                fetchPlantImage(candidate.genus, candidate.species, candidate.variety || '').then(imageUrl => {
+                    const imgEl = document.getElementById(`candidate-img-${index}`);
+                    if (imgEl && imageUrl) {
+                        imgEl.src = imageUrl;
+                    } else if (imgEl) {
+                        setNoImageFallback(imgEl, googleImageUrl, candidate.genus);
+                    }
+                });
+            }
+        });
+
+        // 選択ボタンのイベントリスナー
+        varietySearchResults.querySelectorAll('.select-variety-btn').forEach((btn, idx) => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const candidate = candidates[idx];
+                selectVarietyCandidate(candidate);
+            });
+        });
+    };
+
+    // 候補を選択してフォームに反映
+    const selectVarietyCandidate = (candidate) => {
+        document.getElementById('genus').value = candidate.genus || '';
+        document.getElementById('species').value = candidate.species || '';
+        document.getElementById('variety').value = candidate.variety || '';
+
+        // エディタのタイトルを更新
+        editorTitle.textContent = `Editing: ${candidate.genus || ''} ${candidate.species || ''}`.trim();
+
+        // モーダルを閉じる
+        varietyModal.hide();
+
+        // エディターを表示
+        placeholder.style.display = 'none';
+        editorArea.style.display = 'block';
+
+        showAlert('success', `${candidate.genus} ${candidate.species} を選択しました。「詳細情報を取得」をクリックして追加情報を取得できます。`, 'main-alert-box');
+    };
+
     // AI検索ボタン
     aiLookupBtn.addEventListener('click', async () => {
         const genus = document.getElementById('genus').value;
@@ -379,5 +608,27 @@ function initializePlantLibrary() {
             reader.readAsDataURL(file);
         }
     });
-}
 
+    // カメラ撮影
+    const cameraCaptureBtn = document.getElementById('camera-capture-btn');
+    const cameraInput = document.getElementById('plant-image-camera');
+
+    if (cameraCaptureBtn && cameraInput) {
+        // ボタンクリックでカメラ入力をトリガー
+        cameraCaptureBtn.addEventListener('click', () => {
+            cameraInput.click();
+        });
+
+        // カメラで撮影した画像を処理
+        cameraInput.addEventListener('change', () => {
+            const file = cameraInput.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    imagePreview.src = e.target.result;
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+    }
+}
