@@ -60,16 +60,32 @@ function initializeDeviceManagement() {
     function renderScanResults(devices) {
         const plantTbody = document.getElementById('scan-results-plant-tbody');
         const switchbotTbody = document.getElementById('scan-results-switchbot-tbody');
+        
+        // Get MAC addresses of already registered devices
+        const registeredMacs = new Set();
+        document.querySelectorAll('#registered-plant-sensors-tbody tr, #registered-switchbot-devices-tbody tr').forEach(row => {
+            const macAddressCell = row.querySelector('td:nth-child(2)');
+            if (macAddressCell && macAddressCell.textContent) {
+                // Normalize MAC address: remove colons/hyphens and convert to lower case
+                registeredMacs.add(macAddressCell.textContent.trim().replace(/:|-/g, '').toLowerCase());
+            }
+        });
+
         devices.forEach(device => {
-            const row = document.createElement('tr');
-            const addButton = `<button class="btn btn-sm btn-success btn-add" data-name="${device.name}" data-address="${device.address}" data-type="${device.type}">Add</button>`;
-            if (device.type === 'plant_sensor') {
-                row.innerHTML = `<td>${device.name}</td><td>${device.address}</td><td>${device.rssi} dBm</td><td>${addButton}</td>`;
-                plantTbody.appendChild(row);
-            } else if (device.type.startsWith('switchbot_')) {
-                const deviceTypeBadge = `<span class="badge bg-info">${device.type.replace('switchbot_', '')}</span>`;
-                row.innerHTML = `<td>${device.name}</td><td>${device.address}</td><td>${deviceTypeBadge}</td><td>${device.rssi} dBm</td><td>${addButton}</td>`;
-                switchbotTbody.appendChild(row);
+            // Normalize scanned device MAC address before checking against registered set
+            const normalizedScannedMac = device.address.replace(/:|-/g, '').toLowerCase();
+            // Only add if the device is not already registered
+            if (!registeredMacs.has(normalizedScannedMac)) {
+                const row = document.createElement('tr');
+                const addButton = `<button class="btn btn-sm btn-success btn-add" data-name="${device.name}" data-address="${device.address}" data-type="${device.type}">Add</button>`;
+                if (device.type === 'plant_sensor') {
+                    row.innerHTML = `<td>${device.name}</td><td>${device.address}</td><td>${device.rssi} dBm</td><td>${addButton}</td>`;
+                    plantTbody.appendChild(row);
+                } else if (device.type.startsWith('switchbot_')) {
+                    const deviceTypeBadge = `<span class="badge bg-info">${device.type.replace('switchbot_', '')}</span>`;
+                    row.innerHTML = `<td>${device.name}</td><td>${device.address}</td><td>${deviceTypeBadge}</td><td>${device.rssi} dBm</td><td>${addButton}</td>`;
+                    switchbotTbody.appendChild(row);
+                }
             }
         });
     }
@@ -196,3 +212,5 @@ function initializeDeviceManagement() {
         return { r, g, b };
     }
 }
+
+

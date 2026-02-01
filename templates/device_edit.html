@@ -1,0 +1,739 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Edit Device: {{ device.device_name }}</h2>
+        <div>
+            <button id="save-settings-btn" class="btn btn-primary me-2" data-device-id="{{ device.device_id }}">
+                <i class="bi bi-save"></i> Save to Device
+            </button>
+            <button id="refresh-settings-btn" class="btn btn-outline-primary me-2" data-device-id="{{ device.device_id }}">
+                <i class="bi bi-arrow-clockwise"></i> Refresh from Device
+            </button>
+            <a href="{{ url_for('devices.device_profile_detail', device_id=device.device_id) }}" class="btn btn-outline-secondary">Back</a>
+        </div>
+    </div>
+    
+    <div id="edit-alert-box"></div>
+
+    <div class="row g-4">
+        <!-- General Settings -->
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-light">
+                    <h5 class="card-title mb-0">General Settings</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row align-items-end">
+                        <div class="col-md-6">
+                            <label for="db-device-name" class="form-label">Device Name (Dashboard)</label>
+                            <div class="input-group">
+                                <input type="text" class="form-control" id="db-device-name" value="{{ device.device_name }}">
+                                <button class="btn btn-outline-primary" type="button" id="btn-update-db-name" data-device-id="{{ device.device_id }}">
+                                    <i class="bi bi-pencil-square"></i> Rename
+                                </button>
+                            </div>
+                            <div class="form-text">This name is used within the dashboard database.</div>
+                        </div>
+                        <div class="col-md-6 text-md-end mt-3 mt-md-0">
+                             <button class="btn btn-outline-danger" id="btn-reboot-device" data-device-id="{{ device.device_id }}">
+                                <i class="bi bi-power"></i> Reboot Device
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- System Status -->
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-header bg-light">
+                    <h5 class="card-title mb-0">System Status</h5>
+                </div>
+                <div class="card-body">
+                    <dl class="row mb-0">
+                        <dt class="col-sm-6">Uptime</dt>
+                        <dd class="col-sm-6"><span id="val-uptime">{{ system_status.uptime_seconds }}</span> s</dd>
+                        
+                        <dt class="col-sm-6">Heap Free</dt>
+                        <dd class="col-sm-6"><span id="val-heap">{{ system_status.heap_free }}</span> bytes</dd>
+                        
+                        <dt class="col-sm-6">Task Count</dt>
+                        <dd class="col-sm-6"><span id="val-task-count">{{ system_status.task_count }}</span></dd>
+                        
+                        <dt class="col-sm-6">Device Time</dt>
+                        <dd class="col-sm-6"><span id="val-device-time">{{ system_status.current_time_str }}</span></dd>
+                        
+                        <dt class="col-sm-6">WiFi Connection</dt>
+                        <dd class="col-sm-6" id="val-wifi-status">
+                            {% if system_status.wifi_connected %}
+                            <span class="badge bg-success">Connected</span>
+                            {% else %}
+                            <span class="badge bg-secondary">Disconnected</span>
+                            {% endif %}
+                        </dd>
+                        
+                        <dt class="col-sm-6">BLE Connection</dt>
+                        <dd class="col-sm-6" id="val-ble-status">
+                            {% if system_status.ble_connected %}
+                            <span class="badge bg-success">Connected</span>
+                            {% else %}
+                            <span class="badge bg-secondary">Disconnected</span>
+                            {% endif %}
+                        </dd>
+                    </dl>
+                </div>
+            </div>
+        </div>
+
+        <!-- Device Info -->
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-header bg-light">
+                    <h5 class="card-title mb-0">Device Information</h5>
+                </div>
+                <div class="card-body">
+                    <dl class="row mb-0">
+                        <dt class="col-sm-5">Device Name</dt>
+                        <dd class="col-sm-7" id="val-device-name">{{ device_info.device_name }}</dd>
+                        
+                        <dt class="col-sm-5">Firmware Ver</dt>
+                        <dd class="col-sm-7" id="val-fw-ver">{{ device_info.firmware_version }}</dd>
+                        
+                        <dt class="col-sm-5">Hardware Ver</dt>
+                        <dd class="col-sm-7" id="val-hw-ver">{{ device_info.hardware_version }}</dd>
+                        
+                        <dt class="col-sm-5">Total Readings</dt>
+                        <dd class="col-sm-7" id="val-total-readings">{{ device_info.total_sensor_readings }}</dd>
+                    </dl>
+                </div>
+            </div>
+        </div>
+
+        <!-- Assigned Plant -->
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-header bg-light">
+                    <h5 class="card-title mb-0">Assigned Plant</h5>
+                </div>
+                <div class="card-body">
+                    {% if device.assigned_plant %}
+                    <div class="d-flex align-items-center">
+                        <img src="{{ device.assigned_plant.display_image_url or 'https://placehold.co/100x100/eeeeee/cccccc?text=No+Image' }}" 
+                             class="rounded me-3" style="width: 60px; height: 60px; object-fit: cover;"
+                             onerror="this.onerror=null;this.src='https://placehold.co/100x100/eeeeee/cccccc?text=No+Image';">
+                        <div>
+                            <h6 class="mb-0 fw-bold">{{ device.assigned_plant.plant_name }}</h6>
+                            <div class="text-muted small">{{ device.assigned_plant.genus }} {{ device.assigned_plant.species }}</div>
+                            <a href="{{ url_for('dashboard.plant_detail', managed_plant_id=device.assigned_plant.managed_plant_id) }}" class="btn btn-sm btn-link p-0 text-decoration-none">View Details</a>
+                        </div>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-3 text-muted">
+                        <i class="bi bi-flower2 fs-4"></i>
+                        <p class="mb-2">No plant assigned</p>
+                        <a href="{{ url_for('management.management') }}" class="btn btn-sm btn-outline-primary">Assign Plant</a>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- LED Control -->
+        {% if device.device_type == 'plant_sensor' %}
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-header bg-light">
+                    <h5 class="card-title mb-0">LED Control</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row g-2 align-items-center mb-3">
+                        <div class="col-sm-6">
+                            <label for="led-color-select" class="form-label text-muted">Color</label>
+                            <select class="form-select" id="led-color-select">
+                                <option value="FF0000">Red</option>
+                                <option value="00FF00">Green</option>
+                                <option value="0000FF">Blue</option>
+                                <option value="FFFF00">Yellow</option>
+                                <option value="00FFFF">Cyan</option>
+                                <option value="FF00FF">Magenta</option>
+                                <option value="FFFFFF" selected>White</option>
+                                <option value="000000">Off</option>
+                            </select>
+                        </div>
+                        <div class="col-sm-6">
+                            <label for="led-brightness-input" class="form-label text-muted">Brightness (%)</label>
+                            <input type="number" class="form-control" id="led-brightness-input" value="50" min="0" max="100">
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="led-duration-input" class="form-label text-muted">Duration (ms)</label>
+                        <input type="number" class="form-control" id="led-duration-input" value="1000" min="0">
+                    </div>
+                    <div class="d-grid">
+                        <button class="btn btn-outline-primary" id="control-led-button" data-device-id="{{ device.device_id }}">
+                            <i class="bi bi-lightbulb-fill"></i> Light Up
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Plant Profile -->
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-light">
+                    <h5 class="card-title mb-0">Plant Profile</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label class="form-label text-muted">Plant Name</label>
+                            <input type="text" class="form-control" id="input-plant-name" value="{{ plant_profile.plant_name }}">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label text-muted">Dry Threshold (pF)</label>
+                            <input type="number" step="0.1" class="form-control" id="input-dry-threshold" value="{{ '%.1f' % plant_profile.soil_dry_threshold }}">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label text-muted">Wet Threshold (pF)</label>
+                            <input type="number" step="0.1" class="form-control" id="input-wet-threshold" value="{{ '%.1f' % plant_profile.soil_wet_threshold }}">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label text-muted">Watering Days</label>
+                            <input type="number" class="form-control" id="input-watering-days" value="{{ plant_profile.soil_dry_days_for_watering }}">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label text-muted">Watering Detect (mV)</label>
+                            <input type="number" step="0.1" class="form-control" id="input-watering-detect" value="{{ '%.1f' % plant_profile.watering_threshold }}">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label text-muted">Temp High (°C)</label>
+                            <input type="number" step="0.1" class="form-control" id="input-temp-high" value="{{ '%.1f' % plant_profile.temp_high_limit }}">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label text-muted">Temp Low (°C)</label>
+                            <input type="number" step="0.1" class="form-control" id="input-temp-low" value="{{ '%.1f' % plant_profile.temp_low_limit }}">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- WiFi & Timezone -->
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-header bg-light">
+                    <h5 class="card-title mb-0">WiFi Settings</h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="form-label text-muted">SSID</label>
+                        <input type="text" class="form-control" id="input-ssid" value="{{ wifi_config.ssid }}">
+                    </div>
+                    <div>
+                        <label class="form-label text-muted">Password</label>
+                        <input type="password" class="form-control" id="input-password" value="{{ wifi_config.password }}">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-header bg-light">
+                    <h5 class="card-title mb-0">Timezone</h5>
+                </div>
+                <div class="card-body">
+                    <label class="form-label text-muted">Current Timezone</label>
+                    <input type="text" class="form-control" id="input-timezone" value="{{ timezone }}">
+                </div>
+            </div>
+        </div>
+
+        <!-- Soil Sensor Config -->
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-light">
+                    <h5 class="card-title mb-0">Soil Sensor Configuration</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row mb-3">
+                        <div class="col-md-3">
+                            <strong>HW Version:</strong> <span id="val-sensor-hw-ver">{{ sensor_config.hardware_version }}</span>
+                        </div>
+                        <div class="col-md-3">
+                            <strong>Data Ver:</strong> <span id="val-sensor-data-ver">{{ sensor_config.data_structure_version }}</span>
+                        </div>
+                        <div class="col-md-3">
+                            <strong>Moisture Type:</strong> 
+                            <span id="val-moisture-type">{% if sensor_config.moisture_sensor.sensor_type == 1 %}FDC1004{% else %}ADC{% endif %}</span>
+                        </div>
+                        <div class="col-md-3">
+                            <strong>Probe Length:</strong> <span id="val-probe-length">{{ sensor_config.moisture_sensor.probe_length_mm }}</span> mm
+                        </div>
+                    </div>
+                    
+                    <h6>Soil Temperature Sensors</h6>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-bordered">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>#</th>
+                                    <th>Type</th>
+                                    <th>Depth</th>
+                                    <th>Range</th>
+                                    <th>Resolution</th>
+                                </tr>
+                            </thead>
+                            <tbody id="table-soil-temp-sensors">
+                                {% for sensor in sensor_config.soil_temp_sensors %}
+                                <tr>
+                                    <td>{{ loop.index }}</td>
+                                    <td>
+                                        {% if sensor.device_type == 1 %}DS18B20
+                                        {% elif sensor.device_type == 2 %}TMP102
+                                        {% elif sensor.device_type == 3 %}TC74
+                                        {% else %}Unknown{% endif %}
+                                    </td>
+                                    <td>{{ sensor.depth_mm }} mm</td>
+                                    <td>{{ sensor.temp_min }} ~ {{ sensor.temp_max }} °C</td>
+                                    <td>{{ sensor.resolution }} °C</td>
+                                </tr>
+                                {% else %}
+                                <tr><td colspan="5" class="text-center">No sensors configured</td></tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="mt-3">
+                        <strong>Extended Temp Sensor:</strong> 
+                        <span id="val-ext-temp-sensor">
+                            {% if sensor_config.ext_temp_sensor.available %}
+                            Available (Type: {{ sensor_config.ext_temp_sensor.device_type }})
+                            {% else %}
+                            Not Available
+                            {% endif %}
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Time Specified Data -->
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-light">
+                    <h5 class="card-title mb-0">Time Specified Data</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3 align-items-end">
+                        <div class="col-auto">
+                            <label class="form-label" for="input-fetch-time">Date & Time</label>
+                            <input type="datetime-local" class="form-control" id="input-fetch-time">
+                        </div>
+                        <div class="col-auto">
+                            <button type="button" class="btn btn-primary" id="btn-fetch-time-data" data-device-id="{{ device.device_id }}">
+                                <i class="bi bi-cloud-download"></i> Fetch Data
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div id="fetch-data-result" class="mt-4" style="display: none;">
+                        <h6>Fetched Data</h6>
+                        <div class="table-responsive">
+                            <table class="table table-bordered table-sm">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Timestamp</th>
+                                        <th>Temp (°C)</th>
+                                        <th>Humidity (%)</th>
+                                        <th>Light (lx)</th>
+                                        <th>Soil Moisture</th>
+                                        <th>Soil Temp (°C)</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="fetch-data-tbody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Firmware Update -->
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-header bg-light">
+                    <h5 class="card-title mb-0">Firmware Update</h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label for="firmwareFile" class="form-label text-muted">Select Firmware File (.bin)</label>
+                        <input class="form-control" type="file" id="firmwareFile" accept=".bin">
+                    </div>
+                    <button class="btn btn-warning w-100" id="btn-update-firmware" data-device-id="{{ device.device_id }}">
+                        <i class="bi bi-cloud-arrow-up"></i> Update Firmware
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const refreshBtn = document.getElementById('refresh-settings-btn');
+    const saveBtn = document.getElementById('save-settings-btn');
+    const fetchTimeDataBtn = document.getElementById('btn-fetch-time-data');
+    const updateFwBtn = document.getElementById('btn-update-firmware');
+    const deviceId = refreshBtn.dataset.deviceId;
+
+    refreshBtn.addEventListener('click', async function() {
+        refreshBtn.disabled = true;
+        refreshBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Connecting...';
+        
+        try {
+            const response = await fetch(`/api/device/${deviceId}/fetch-settings`);
+            const result = await response.json();
+            
+            if (response.ok && result.success) {
+                const data = result.data;
+                
+                // Update System Status
+                document.getElementById('val-uptime').textContent = data.system_status.uptime_seconds;
+                document.getElementById('val-heap').textContent = data.system_status.heap_free;
+                document.getElementById('val-task-count').textContent = data.system_status.task_count;
+                document.getElementById('val-device-time').textContent = data.system_status.current_time_str;
+                
+                document.getElementById('val-wifi-status').innerHTML = data.system_status.wifi_connected ? 
+                    '<span class="badge bg-success">Connected</span>' : '<span class="badge bg-secondary">Disconnected</span>';
+                document.getElementById('val-ble-status').innerHTML = data.system_status.ble_connected ? 
+                    '<span class="badge bg-success">Connected</span>' : '<span class="badge bg-secondary">Disconnected</span>';
+
+                // Update Device Info
+                document.getElementById('val-device-name').textContent = data.device_info.device_name;
+                document.getElementById('val-fw-ver').textContent = data.device_info.firmware_version;
+                document.getElementById('val-hw-ver').textContent = data.device_info.hardware_version;
+                document.getElementById('val-total-readings').textContent = data.device_info.total_sensor_readings;
+
+                // Update Plant Profile
+                document.getElementById('input-plant-name').value = data.plant_profile.plant_name;
+                document.getElementById('input-dry-threshold').value = parseFloat(data.plant_profile.soil_dry_threshold).toFixed(1);
+                document.getElementById('input-wet-threshold').value = parseFloat(data.plant_profile.soil_wet_threshold).toFixed(1);
+                document.getElementById('input-watering-days').value = data.plant_profile.soil_dry_days_for_watering;
+                document.getElementById('input-watering-detect').value = parseFloat(data.plant_profile.watering_threshold).toFixed(1);
+                document.getElementById('input-temp-high').value = parseFloat(data.plant_profile.temp_high_limit).toFixed(1);
+                document.getElementById('input-temp-low').value = parseFloat(data.plant_profile.temp_low_limit).toFixed(1);
+
+                // Update WiFi Config
+                if (data.wifi_config) {
+                    document.getElementById('input-ssid').value = data.wifi_config.ssid;
+                    document.getElementById('input-password').value = data.wifi_config.password;
+                }
+
+                // Update Timezone
+                if (data.timezone) {
+                    document.getElementById('input-timezone').value = data.timezone;
+                }
+
+                // Update Soil Sensor Config
+                if (data.sensor_config) {
+                    document.getElementById('val-sensor-hw-ver').textContent = data.sensor_config.hardware_version;
+                    document.getElementById('val-sensor-data-ver').textContent = data.sensor_config.data_structure_version;
+                    document.getElementById('val-moisture-type').textContent = (data.sensor_config.moisture_sensor.sensor_type === 1) ? 'FDC1004' : 'ADC';
+                    document.getElementById('val-probe-length').textContent = data.sensor_config.moisture_sensor.probe_length_mm;
+
+                    // Update Soil Temp Sensors Table
+                    const tbody = document.getElementById('table-soil-temp-sensors');
+                    tbody.innerHTML = '';
+                    if (data.sensor_config.soil_temp_sensors && data.sensor_config.soil_temp_sensors.length > 0) {
+                        data.sensor_config.soil_temp_sensors.forEach((sensor, index) => {
+                            let typeStr = 'Unknown';
+                            if (sensor.device_type === 1) typeStr = 'DS18B20';
+                            else if (sensor.device_type === 2) typeStr = 'TMP102';
+                            else if (sensor.device_type === 3) typeStr = 'TC74';
+
+                            const row = `<tr>
+                                <td>${index + 1}</td>
+                                <td>${typeStr}</td>
+                                <td>${sensor.depth_mm} mm</td>
+                                <td>${sensor.temp_min} ~ ${sensor.temp_max} °C</td>
+                                <td>${sensor.resolution} °C</td>
+                            </tr>`;
+                            tbody.insertAdjacentHTML('beforeend', row);
+                        });
+                    } else {
+                        tbody.innerHTML = '<tr><td colspan="5" class="text-center">No sensors configured</td></tr>';
+                    }
+
+                    // Update Extended Temp Sensor
+                    const extSensor = data.sensor_config.ext_temp_sensor;
+                    const extSensorEl = document.getElementById('val-ext-temp-sensor');
+                    if (extSensor && extSensor.available) {
+                        extSensorEl.textContent = `Available (Type: ${extSensor.device_type})`;
+                    } else {
+                        extSensorEl.textContent = 'Not Available';
+                    }
+                }
+
+                showAlert('success', 'Device settings updated successfully!', 'edit-alert-box');
+            } else {
+                throw new Error(result.message || 'Failed to fetch settings');
+            }
+        } catch (error) {
+            showAlert('danger', `Error: ${error.message}`, 'edit-alert-box');
+        } finally {
+            refreshBtn.disabled = false;
+            refreshBtn.innerHTML = '<i class="bi bi-arrow-clockwise"></i> Refresh from Device';
+        }
+    });
+
+    saveBtn.addEventListener('click', async function() {
+        if (!confirm('Are you sure you want to write these settings to the device?')) return;
+
+        saveBtn.disabled = true;
+        saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Saving...';
+
+        const payload = {
+            plant_profile: {
+                plant_name: document.getElementById('input-plant-name').value,
+                soil_dry_threshold: parseFloat(document.getElementById('input-dry-threshold').value),
+                soil_wet_threshold: parseFloat(document.getElementById('input-wet-threshold').value),
+                soil_dry_days_for_watering: parseInt(document.getElementById('input-watering-days').value),
+                watering_threshold: parseFloat(document.getElementById('input-watering-detect').value),
+                temp_high_limit: parseFloat(document.getElementById('input-temp-high').value),
+                temp_low_limit: parseFloat(document.getElementById('input-temp-low').value)
+            },
+            wifi_config: {
+                ssid: document.getElementById('input-ssid').value,
+                password: document.getElementById('input-password').value
+            },
+            timezone: document.getElementById('input-timezone').value
+        };
+
+        try {
+            const response = await fetch(`/api/device/${deviceId}/update-settings`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const result = await response.json();
+
+            if (response.ok && result.success) {
+                showAlert('success', result.message, 'edit-alert-box');
+            } else {
+                throw new Error(result.message || 'Failed to save settings');
+            }
+        } catch (error) {
+            showAlert('danger', `Error: ${error.message}`, 'edit-alert-box');
+        } finally {
+            saveBtn.disabled = false;
+            saveBtn.innerHTML = '<i class="bi bi-save"></i> Save to Device';
+        }
+    });
+
+    fetchTimeDataBtn.addEventListener('click', async function() {
+        const timeInput = document.getElementById('input-fetch-time').value;
+        if (!timeInput) {
+            alert('Please select a date and time.');
+            return;
+        }
+
+        fetchTimeDataBtn.disabled = true;
+        fetchTimeDataBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Fetching...';
+        document.getElementById('fetch-data-result').style.display = 'none';
+
+        try {
+            const response = await fetch(`/api/device/${deviceId}/fetch-data-at-time`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ target_time: timeInput })
+            });
+            const result = await response.json();
+
+            if (response.ok && result.success) {
+                const data = result.data;
+                const tbody = document.getElementById('fetch-data-tbody');
+                tbody.innerHTML = `
+                    <tr>
+                        <td>${data.timestamp.replace('T', ' ')}</td>
+                        <td>${data.temperature}</td>
+                        <td>${data.humidity}</td>
+                        <td>${data.light_lux}</td>
+                        <td>${data.soil_moisture}</td>
+                        <td>${data.soil_temperature1}</td>
+                    </tr>
+                `;
+                document.getElementById('fetch-data-result').style.display = 'block';
+            } else {
+                throw new Error(result.message || 'Failed to fetch data');
+            }
+        } catch (error) {
+            showAlert('danger', `Error: ${error.message}`, 'edit-alert-box');
+        } finally {
+            fetchTimeDataBtn.disabled = false;
+            fetchTimeDataBtn.innerHTML = '<i class="bi bi-cloud-download"></i> Fetch Data';
+        }
+    });
+
+    const ledBtn = document.getElementById('control-led-button');
+    if (ledBtn) {
+        ledBtn.addEventListener('click', async function() {
+            const deviceId = ledBtn.dataset.deviceId;
+            const colorHex = document.getElementById('led-color-select').value;
+            const brightness = parseInt(document.getElementById('led-brightness-input').value);
+            const duration = parseInt(document.getElementById('led-duration-input').value);
+
+            // Hex to RGB
+            const r = parseInt(colorHex.substring(0, 2), 16);
+            const g = parseInt(colorHex.substring(2, 4), 16);
+            const b = parseInt(colorHex.substring(4, 6), 16);
+
+            ledBtn.disabled = true;
+            ledBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Sending...';
+
+            try {
+                const response = await fetch('/api/control-led', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        device_id: deviceId,
+                        red: r,
+                        green: g,
+                        blue: b,
+                        brightness: brightness,
+                        duration_ms: duration
+                    })
+                });
+                const result = await response.json();
+
+                if (response.ok && result.success) {
+                    showAlert('success', result.message, 'edit-alert-box');
+                } else {
+                    throw new Error(result.message || 'Failed to control LED');
+                }
+            } catch (error) {
+                showAlert('danger', `Error: ${error.message}`, 'edit-alert-box');
+            } finally {
+                ledBtn.disabled = false;
+                ledBtn.innerHTML = '<i class="bi bi-lightbulb-fill"></i> Light Up';
+            }
+        });
+    }
+
+    if (updateFwBtn) {
+        updateFwBtn.addEventListener('click', async function() {
+            const fileInput = document.getElementById('firmwareFile');
+            if (!fileInput.files.length) {
+                alert('Please select a firmware file.');
+                return;
+            }
+            
+            if (!confirm('Are you sure you want to update the firmware? Do not power off the device.')) return;
+
+            const formData = new FormData();
+            formData.append('firmware_file', fileInput.files[0]);
+
+            updateFwBtn.disabled = true;
+            updateFwBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Updating...';
+
+            try {
+                const response = await fetch(`/api/device/${deviceId}/update-firmware`, {
+                    method: 'POST',
+                    body: formData
+                });
+                const result = await response.json();
+
+                if (response.ok && result.success) {
+                    showAlert('success', result.message, 'edit-alert-box');
+                    fileInput.value = ''; // Clear input
+                } else {
+                    throw new Error(result.message || 'Update failed');
+                }
+            } catch (error) {
+                showAlert('danger', `Error: ${error.message}`, 'edit-alert-box');
+            } finally {
+                updateFwBtn.disabled = false;
+                updateFwBtn.innerHTML = '<i class="bi bi-cloud-arrow-up"></i> Update Firmware';
+            }
+        });
+    }
+
+    // Rename Device (Database)
+    const renameBtn = document.getElementById('btn-update-db-name');
+    if (renameBtn) {
+        renameBtn.addEventListener('click', async function() {
+            const newName = document.getElementById('db-device-name').value;
+            if (!newName) {
+                alert('Please enter a device name.');
+                return;
+            }
+
+            renameBtn.disabled = true;
+            renameBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+
+            try {
+                const response = await fetch(`/api/device/${deviceId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ device_name: newName })
+                });
+                const result = await response.json();
+
+                if (response.ok && result.success) {
+                    showAlert('success', result.message, 'edit-alert-box');
+                    // Update header title
+                    document.querySelector('h2').textContent = `Edit Device: ${newName}`;
+                } else {
+                    throw new Error(result.message || 'Update failed');
+                }
+            } catch (error) {
+                showAlert('danger', `Error: ${error.message}`, 'edit-alert-box');
+            } finally {
+                renameBtn.disabled = false;
+                renameBtn.innerHTML = '<i class="bi bi-pencil-square"></i> Rename';
+            }
+        });
+    }
+
+    // Reboot Device
+    const rebootBtn = document.getElementById('btn-reboot-device');
+    if (rebootBtn) {
+        rebootBtn.addEventListener('click', async function() {
+            if (!confirm('Are you sure you want to reboot the device?')) return;
+
+            rebootBtn.disabled = true;
+            rebootBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Rebooting...';
+
+            try {
+                const response = await fetch(`/api/device/${deviceId}/reboot`, {
+                    method: 'POST'
+                });
+                const result = await response.json();
+
+                if (response.ok && result.success) {
+                    showAlert('success', result.message, 'edit-alert-box');
+                } else {
+                    throw new Error(result.message || 'Reboot failed');
+                }
+            } catch (error) {
+                showAlert('danger', `Error: ${error.message}`, 'edit-alert-box');
+            } finally {
+                // Reboot takes time, so we keep it disabled for a bit or reset
+                setTimeout(() => {
+                    rebootBtn.disabled = false;
+                    rebootBtn.innerHTML = '<i class="bi bi-power"></i> Reboot Device';
+                }, 5000);
+            }
+        });
+    }
+});
+</script>
+{% endblock %}

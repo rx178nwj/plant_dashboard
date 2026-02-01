@@ -323,9 +323,9 @@
                 </div>
                 <div class="card-body">
                     <div class="d-grid gap-2">
-                        <button class="btn btn-outline-primary" disabled>
+                        <a href="{{ url_for('devices.edit_device', device_id=device.device_id) }}" class="btn btn-outline-primary">
                             <i class="bi bi-pencil"></i> Edit Device
-                        </button>
+                        </a>
                         {% if device.device_type == 'plant_sensor' %}
                         <a href="{{ url_for('devices.device_threshold_config', device_id=device.device_id) }}" class="btn btn-outline-info">
                             <i class="bi bi-droplet"></i> Configure Thresholds

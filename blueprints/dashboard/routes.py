@@ -251,7 +251,8 @@ def api_history(device_id):
     if period == '24h':
         query = """
             SELECT timestamp, temperature, humidity, light_lux, soil_moisture,
-                   soil_temperature1, soil_temperature2
+                   soil_temperature1, soil_temperature2,
+                   capacitance_ch1, capacitance_ch2, capacitance_ch3, capacitance_ch4
             FROM sensor_data
             WHERE device_id = ? AND date(timestamp) = ?
             ORDER BY timestamp ASC
@@ -295,7 +296,11 @@ def api_history(device_id):
                 MIN(soil_temperature1) as soil_temperature1_min,
                 AVG(soil_temperature2) as soil_temperature2,
                 MAX(soil_temperature2) as soil_temperature2_max,
-                MIN(soil_temperature2) as soil_temperature2_min
+                MIN(soil_temperature2) as soil_temperature2_min,
+                AVG(capacitance_ch1) as capacitance_ch1,
+                AVG(capacitance_ch2) as capacitance_ch2,
+                AVG(capacitance_ch3) as capacitance_ch3,
+                AVG(capacitance_ch4) as capacitance_ch4
             FROM sensor_data
             WHERE device_id = ? AND timestamp BETWEEN datetime(?, {time_modifier}) AND ?
             {group_by_clause}

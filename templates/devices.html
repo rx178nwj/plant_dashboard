@@ -23,7 +23,7 @@
                         <thead>
                             <tr><th>Name</th><th>MAC Address</th><th>Actions</th></tr>
                         </thead>
-                        <tbody>
+                        <tbody id="registered-plant-sensors-tbody">
                             {% set plant_sensors = registered_devices | selectattr('device_type', 'equalto', 'plant_sensor') | list %}
                             {% for device in plant_sensors %}
                             <tr>

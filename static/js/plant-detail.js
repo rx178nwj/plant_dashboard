@@ -727,8 +727,18 @@ async function updateSensorHistoryChart(deviceId, period, chartInstances, select
                     { label: 'Soil Max', data: historyData.map(d => d.soil_moisture_max), yAxisID: 'y_soil', borderColor: 'transparent', backgroundColor: 'rgba(139, 69, 19, 0.2)', pointRadius: 0, fill: false },
                     { label: 'Soil Moisture', data: historyData.map(d => d.soil_moisture), borderColor: 'rgba(139, 69, 19, 1)', yAxisID: 'y_soil', tension: 0.1, borderWidth: 2, pointRadius: 0 }
                 );
-                scales.y_soil = { position: 'right', title: { display: true, text: 'Soil Moisture' }, grid: { drawOnChartArea: false } };
+                scales.y_soil = { position: 'right', title: { display: true, text: 'Soil Moisture (pF)' }, grid: { drawOnChartArea: false } };
             }
+            const capColors = ['rgba(192, 132, 72, 0.8)', 'rgba(160, 100, 40, 0.8)', 'rgba(210, 155, 100, 0.8)', 'rgba(128, 80, 32, 0.8)'];
+            [1, 2, 3, 4].forEach((ch, i) => {
+                if (historyData.some(d => d[`capacitance_ch${ch}`] !== null && d[`capacitance_ch${ch}`] !== undefined)) {
+                    datasets.push({
+                        label: `Capacitance Ch${ch} (pF)`, data: historyData.map(d => d[`capacitance_ch${ch}`]),
+                        borderColor: capColors[i], yAxisID: 'y_soil', tension: 0.1, borderWidth: 1.5, pointRadius: 0, borderDash: [4, 2]
+                    });
+                    if (!scales.y_soil) scales.y_soil = { position: 'right', title: { display: true, text: 'Soil Moisture (pF)' }, grid: { drawOnChartArea: false } };
+                }
+            });
             if (historyData.some(d => d.soil_temperature1 !== null)) {
                 datasets.push(
                     { label: 'Soil Temp1 Min', data: historyData.map(d => d.soil_temperature1_min), yAxisID: 'y_temp', borderColor: 'transparent', backgroundColor: 'rgba(0, 150, 136, 0.2)', pointRadius: 0, fill: '+1' },
@@ -761,8 +771,18 @@ async function updateSensorHistoryChart(deviceId, period, chartInstances, select
                 datasets.push(
                     { label: 'Soil Moisture', data: historyData.map(d => d.soil_moisture), borderColor: 'rgba(139, 69, 19, 0.8)', yAxisID: 'y_soil', tension: 0.2, pointRadius: 0 }
                 );
-                scales.y_soil = { position: 'right', title: { display: true, text: 'Soil Moisture' }, grid: { drawOnChartArea: false } };
+                scales.y_soil = { position: 'right', title: { display: true, text: 'Soil Moisture (pF)' }, grid: { drawOnChartArea: false } };
             }
+            const capColorsRaw = ['rgba(192, 132, 72, 0.8)', 'rgba(160, 100, 40, 0.8)', 'rgba(210, 155, 100, 0.8)', 'rgba(128, 80, 32, 0.8)'];
+            [1, 2, 3, 4].forEach((ch, i) => {
+                if (historyData.some(d => d[`capacitance_ch${ch}`] !== null && d[`capacitance_ch${ch}`] !== undefined)) {
+                    datasets.push({
+                        label: `Capacitance Ch${ch} (pF)`, data: historyData.map(d => d[`capacitance_ch${ch}`]),
+                        borderColor: capColorsRaw[i], yAxisID: 'y_soil', tension: 0.2, pointRadius: 0, borderDash: [4, 2]
+                    });
+                    if (!scales.y_soil) scales.y_soil = { position: 'right', title: { display: true, text: 'Soil Moisture (pF)' }, grid: { drawOnChartArea: false } };
+                }
+            });
             if (historyData.some(d => d.soil_temperature1 !== null)) {
                 datasets.push(
                     { label: 'Soil Temp1 (°C)', data: historyData.map(d => d.soil_temperature1), borderColor: 'rgba(0, 150, 136, 0.8)', yAxisID: 'y_temp', tension: 0.2, pointRadius: 0 }
