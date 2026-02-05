@@ -3,7 +3,9 @@ import asyncio
 import logging
 import json
 from datetime import datetime
+from collections import deque
 import os
+import subprocess
 
 import config
 import device_manager as dm
@@ -17,17 +19,99 @@ DATA_PIPE_PATH = "/tmp/plant_dashboard_pipe.jsonl"
 # コマンド用パイプのパスをconfigから読み込む
 COMMAND_PIPE_PATH = config.COMMAND_PIPE_PATH
 
-logging.basicConfig(
-    level=config.LOG_LEVEL,
-    format='%(asctime)s - [BluetoothDaemon] - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler(config.LOG_FILE_PATH),
-        logging.StreamHandler()
-    ]
-)
+log_format = '%(asctime)s - [BluetoothDaemon] - %(levelname)s - %(message)s'
+formatter = logging.Formatter(log_format)
+
+# ファイルハンドラー（WARNING以上を出力）
+file_handler = logging.FileHandler(config.LOG_FILE_PATH)
+file_handler.setLevel(logging.WARNING)
+file_handler.setFormatter(formatter)
+
+# コンソールハンドラー（WARNING以上を出力）
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.WARNING)
+console_handler.setFormatter(formatter)
+
+# ルートロガー設定
+logging.basicConfig(level=logging.WARNING, handlers=[file_handler, console_handler])
+
 logger = logging.getLogger(__name__)
-# ロガーのレベルをDEBUGに設定
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.WARNING)
+
+
+class BluetoothConnectionTracker:
+    """Bluetooth接続成功率を追跡し、必要に応じてBluetoothサービスを再起動する"""
+
+    def __init__(self, history_size=10, success_rate_threshold=0.5, restart_cooldown_seconds=600):
+        self.history = deque(maxlen=history_size)
+        self.success_rate_threshold = success_rate_threshold
+        self.restart_cooldown_seconds = restart_cooldown_seconds
+        self.last_restart_time = None
+
+    def record_result(self, success: bool):
+        """接続結果を記録する"""
+        self.history.append(success)
+
+    def get_success_rate(self) -> float:
+        """現在の成功率を取得する（0.0 ~ 1.0）"""
+        if len(self.history) == 0:
+            return 1.0
+        return sum(self.history) / len(self.history)
+
+    def should_restart_bluetooth(self) -> bool:
+        """Bluetoothサービスを再起動すべきかどうかを判定する"""
+        # 履歴が十分にない場合は再起動しない
+        if len(self.history) < self.history.maxlen:
+            return False
+
+        # 成功率が閾値以上なら再起動不要
+        if self.get_success_rate() >= self.success_rate_threshold:
+            return False
+
+        # クールダウン期間中は再起動しない
+        if self.last_restart_time is not None:
+            elapsed = (datetime.now() - self.last_restart_time).total_seconds()
+            if elapsed < self.restart_cooldown_seconds:
+                logger.debug(f"Bluetooth再起動クールダウン中: あと{self.restart_cooldown_seconds - elapsed:.0f}秒")
+                return False
+
+        return True
+
+    def restart_bluetooth(self) -> bool:
+        """Bluetoothサービスを再起動する"""
+        success_rate = self.get_success_rate()
+        logger.warning(
+            f"Bluetooth接続成功率が低下しています: {success_rate*100:.0f}% "
+            f"(直近{len(self.history)}回中{sum(self.history)}回成功). "
+            f"Bluetoothサービスを再起動します..."
+        )
+
+        try:
+            result = subprocess.run(
+                ['sudo', 'systemctl', 'restart', 'bluetooth'],
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+            if result.returncode == 0:
+                logger.info("Bluetoothサービスを正常に再起動しました。接続履歴をリセットします。")
+                self.history.clear()
+                self.last_restart_time = datetime.now()
+                return True
+            else:
+                logger.error(f"Bluetoothサービスの再起動に失敗しました: {result.stderr}")
+                return False
+        except subprocess.TimeoutExpired:
+            logger.error("Bluetoothサービスの再起動がタイムアウトしました")
+            return False
+        except Exception as e:
+            logger.error(f"Bluetoothサービスの再起動中にエラーが発生しました: {e}")
+            return False
+
+
+# グローバルなトラッカーインスタンス
+bt_connection_tracker = BluetoothConnectionTracker()
+
 
 # --- ble_manager.pyから移動した関数群 ---
 
@@ -332,10 +416,12 @@ async def main_loop():
 
                     # 成功カウント（データがNoneでも接続は成功とみなす）
                     success_count += 1
+                    bt_connection_tracker.record_result(True)
 
                 except Exception as e:
                     error_count += 1
                     ble_error_count += 1
+                    bt_connection_tracker.record_result(False)
                     logger.error(f"{dev_id} のデータ収集中に未処理のエラーが発生しました: {e}", exc_info=True)
                     # エラー情報もpipeに書き出す
                     write_to_pipe({
@@ -345,6 +431,13 @@ async def main_loop():
                     })
 
                 await asyncio.sleep(2) # デバイス間のポーリングに短い遅延
+
+            # Bluetooth接続成功率をチェックし、必要なら再起動
+            if bt_connection_tracker.should_restart_bluetooth():
+                bt_connection_tracker.restart_bluetooth()
+                # 再起動後は少し長めに待機してBluetoothスタックの安定化を待つ
+                logger.info("Bluetooth再起動後、15秒間待機します...")
+                await asyncio.sleep(15)
 
             logger.info(f"データ収集サイクルが終了しました。{config.DATA_FETCH_INTERVAL} 秒間待機します。")
             await asyncio.sleep(config.DATA_FETCH_INTERVAL)
