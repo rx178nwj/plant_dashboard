@@ -1,6 +1,7 @@
 # Logs
 logs/
 *.log
+log
 
 # OS Files
 .DS_Store
@@ -32,6 +33,8 @@ __pycache__/
 data/plant_monitor.db
 data/*.db
 *.db
+*.db-shm
+*.db-wal
 
 # Uploads
 static/uploads/

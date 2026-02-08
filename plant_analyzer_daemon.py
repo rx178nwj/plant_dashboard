@@ -16,14 +16,27 @@ DATA_FETCH_INTERVAL_SECONDS = 60  # 1分
 # 1時間ごとに分析を実行
 ANALYSIS_INTERVAL_SECONDS = 3600
 
-logging.basicConfig(
-    level=config.LOG_LEVEL,
-    format='%(asctime)s - [AnalyzerDaemon] - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler(config.LOG_FILE_PATH),
-        logging.StreamHandler()
-    ]
-)
+log_format = '%(asctime)s - [AnalyzerDaemon] - %(levelname)s - %(message)s'
+formatter = logging.Formatter(log_format)
+
+# ファイルハンドラー（全般ログ）
+file_handler = logging.FileHandler(config.LOG_FILE_PATH)
+file_handler.setLevel(logging.INFO)
+file_handler.setFormatter(formatter)
+
+# エラー専用ファイルハンドラー
+error_file_handler = logging.FileHandler(config.ERROR_LOG_PATH)
+error_file_handler.setLevel(logging.ERROR)
+error_file_handler.setFormatter(formatter)
+
+# コンソールハンドラー
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.INFO)
+console_handler.setFormatter(formatter)
+
+# ルートロガー設定
+logging.basicConfig(level=logging.INFO, handlers=[file_handler, error_file_handler, console_handler])
+
 logger = logging.getLogger(__name__)
 # ★★★ デバッグログを表示するためのおまじない ★★★
 #logger.setLevel(logging.DEBUG)

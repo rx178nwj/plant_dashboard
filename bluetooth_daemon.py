@@ -22,31 +22,38 @@ COMMAND_PIPE_PATH = config.COMMAND_PIPE_PATH
 log_format = '%(asctime)s - [BluetoothDaemon] - %(levelname)s - %(message)s'
 formatter = logging.Formatter(log_format)
 
-# ファイルハンドラー（WARNING以上を出力）
+# ファイルハンドラー（全般ログ）
 file_handler = logging.FileHandler(config.LOG_FILE_PATH)
-file_handler.setLevel(logging.WARNING)
+file_handler.setLevel(logging.INFO)
 file_handler.setFormatter(formatter)
 
-# コンソールハンドラー（WARNING以上を出力）
+# エラー専用ファイルハンドラー
+error_file_handler = logging.FileHandler(config.ERROR_LOG_PATH)
+error_file_handler.setLevel(logging.ERROR)
+error_file_handler.setFormatter(formatter)
+
+# コンソールハンドラー
 console_handler = logging.StreamHandler()
-console_handler.setLevel(logging.WARNING)
+console_handler.setLevel(logging.INFO)
 console_handler.setFormatter(formatter)
 
 # ルートロガー設定
-logging.basicConfig(level=logging.WARNING, handlers=[file_handler, console_handler])
+logging.basicConfig(level=logging.INFO, handlers=[file_handler, error_file_handler, console_handler])
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.WARNING)
+logger.setLevel(logging.INFO)
 
 
 class BluetoothConnectionTracker:
     """Bluetooth接続成功率を追跡し、必要に応じてBluetoothサービスを再起動する"""
 
-    def __init__(self, history_size=10, success_rate_threshold=0.5, restart_cooldown_seconds=600):
+    def __init__(self, history_size=10, success_rate_threshold=0.5, restart_cooldown_seconds=600, max_restarts_before_reboot=3):
         self.history = deque(maxlen=history_size)
         self.success_rate_threshold = success_rate_threshold
         self.restart_cooldown_seconds = restart_cooldown_seconds
         self.last_restart_time = None
+        self.consecutive_restarts = 0
+        self.max_restarts_before_reboot = max_restarts_before_reboot
 
     def record_result(self, success: bool):
         """接続結果を記録する"""
@@ -77,13 +84,36 @@ class BluetoothConnectionTracker:
 
         return True
 
+    def reboot_system(self):
+        """システムを再起動する"""
+        logger.critical(
+            f"Bluetoothサービスの再起動を{self.consecutive_restarts}回繰り返しても改善しないため、システムを再起動します..."
+        )
+        try:
+            # ログを書き込む時間を確保
+            import time
+            time.sleep(2)
+            subprocess.run(['sudo', 'reboot'], check=True)
+        except Exception as e:
+            logger.error(f"システムの再起動に失敗しました: {e}")
+
     def restart_bluetooth(self) -> bool:
         """Bluetoothサービスを再起動する"""
+        # 前回の再起動から十分に時間が経過していれば（例: 1時間）、連続再起動カウントをリセット
+        if self.last_restart_time and (datetime.now() - self.last_restart_time).total_seconds() > 3600:
+             logger.info("前回の再起動から1時間以上経過しているため、連続再起動カウントをリセットします。")
+             self.consecutive_restarts = 0
+
+        # 連続再起動回数が上限を超えた場合はシステム再起動
+        if self.consecutive_restarts >= self.max_restarts_before_reboot:
+            self.reboot_system()
+            return False
+
         success_rate = self.get_success_rate()
         logger.warning(
             f"Bluetooth接続成功率が低下しています: {success_rate*100:.0f}% "
             f"(直近{len(self.history)}回中{sum(self.history)}回成功). "
-            f"Bluetoothサービスを再起動します..."
+            f"Bluetoothサービスを再起動します... (試行 {self.consecutive_restarts + 1}/{self.max_restarts_before_reboot})"
         )
 
         try:
@@ -93,19 +123,27 @@ class BluetoothConnectionTracker:
                 text=True,
                 timeout=30
             )
+            
+            # 再起動を試みたのでカウントアップ（成功・失敗に関わらず）
+            self.consecutive_restarts += 1
+            self.last_restart_time = datetime.now()
+            
             if result.returncode == 0:
                 logger.info("Bluetoothサービスを正常に再起動しました。接続履歴をリセットします。")
                 self.history.clear()
-                self.last_restart_time = datetime.now()
                 return True
             else:
                 logger.error(f"Bluetoothサービスの再起動に失敗しました: {result.stderr}")
                 return False
         except subprocess.TimeoutExpired:
             logger.error("Bluetoothサービスの再起動がタイムアウトしました")
+            self.consecutive_restarts += 1
+            self.last_restart_time = datetime.now()
             return False
         except Exception as e:
             logger.error(f"Bluetoothサービスの再起動中にエラーが発生しました: {e}")
+            self.consecutive_restarts += 1
+            self.last_restart_time = datetime.now()
             return False
 
 

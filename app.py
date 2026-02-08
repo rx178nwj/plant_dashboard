@@ -63,7 +63,27 @@ def create_app():
     return app
 
 if __name__ == '__main__':
-    logging.basicConfig(level=config.LOG_LEVEL, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', handlers=[logging.FileHandler(config.LOG_FILE_PATH), logging.StreamHandler()])
+    log_format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    formatter = logging.Formatter(log_format)
+
+    # ファイルハンドラー（全般ログ）
+    file_handler = logging.FileHandler(config.LOG_FILE_PATH)
+    file_handler.setLevel(logging.INFO)
+    file_handler.setFormatter(formatter)
+
+    # エラー専用ファイルハンドラー
+    error_file_handler = logging.FileHandler(config.ERROR_LOG_PATH)
+    error_file_handler.setLevel(logging.ERROR)
+    error_file_handler.setFormatter(formatter)
+
+    # コンソールハンドラー
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.INFO)
+    console_handler.setFormatter(formatter)
+
+    # ルートロガー設定
+    logging.basicConfig(level=logging.INFO, handlers=[file_handler, error_file_handler, console_handler])
+
     app = create_app()
     app.run(host='0.0.0.0', port=8000, debug=False)
 

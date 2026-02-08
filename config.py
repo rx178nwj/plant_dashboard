@@ -14,6 +14,7 @@ ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY')
 # --- ログ設定 ---
 LOG_LEVEL = logging.INFO # loggingモジュールの定数を使用
 LOG_FILE_PATH = os.path.join(BASE_DIR, 'logs', 'plant_dashboard.log')
+ERROR_LOG_PATH = os.path.join(BASE_DIR, 'logs', 'error.log')
 # ログディレクトリがなければ作成
 os.makedirs(os.path.join(BASE_DIR, 'logs'), exist_ok=True)
 
