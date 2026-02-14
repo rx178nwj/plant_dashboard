@@ -316,6 +316,8 @@ async def process_commands(plant_connections):
                                 logger.info(f"{device_id} に閾値を正常に送信しました。")
                         except Exception as e:
                             logger.error(f"{device_id} への閾値の送信に失敗しました: {e}")
+                        finally:
+                            await ble_device.disconnect()
                     else:
                         logger.error(f"set_watering_thresholds のペイロードが無効です: {payload}")
                 
@@ -354,6 +356,8 @@ async def process_commands(plant_connections):
                                 logger.info(f"Successfully sent LED control command to {device_id}.")
                         except Exception as e:
                             logger.error(f"Failed to send LED control command to {device_id}: {e}")
+                        finally:
+                            await ble_device.disconnect()
                     else:
                         logger.error(f"Invalid payload for control_led: {payload}")
 
@@ -443,12 +447,13 @@ async def main_loop():
                         sensor_data = await get_switchbot_adv_data(mac_address)
 
                     # 取得結果をpipeファイルに書き出す
-                    # data_versionをパイプデータに含める
+                    # センサーデータに含まれるdata_versionを優先し、なければDB値を使用
+                    actual_data_version = sensor_data.get('data_version', data_version) if sensor_data else data_version
                     pipe_data = {
                         "device_id": dev_id,
                         "timestamp": datetime.now().isoformat(),
-                        "data_version": data_version,
-                        "data": sensor_data # データがなくてもNoneとして記録
+                        "data_version": actual_data_version,
+                        "data": sensor_data  # データがなくてもNoneとして記録
                     }
                     write_to_pipe(pipe_data)
 

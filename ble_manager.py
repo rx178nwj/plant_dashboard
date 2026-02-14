@@ -20,7 +20,9 @@ SWITCHBOT_COMMON_SERVICE_UUID = "0000fd3d-0000-1000-8000-00805f9b34fb"
 
 # --- コマンド定義 ---
 CMD_GET_SENSOR_DATA = 0x01
-CMD_SET_WATERING_THRESHOLDS = 0x02
+CMD_GET_SYSTEM_STATUS = 0x02
+CMD_SET_PLANT_PROFILE = 0x03
+CMD_GET_PLANT_PROFILE = 0x0C
 CMD_CONTROL_LED = 0x18
 
 # Ensure log directory exists
@@ -103,38 +105,27 @@ def _parse_tm_data_t(data, offset):
     return tm_dict, offset + tm_size
 
 
-def _parse_sensor_data_v2(payload, device_id):
+def _parse_sensor_common(payload, device_id):
     """
-    data_version 2 のセンサーデータをパースする (PlantMonitor_30用)
+    data_version 2/3 共通のセンサーデータをパースする。
+    soil_temperature[4] + soil_temperature_count + soil_moisture_capacitance[4] まで読み取る。
 
     Args:
-        payload: 79または84バイトのペイロードデータ
+        payload: ペイロードデータ
         device_id: ログ出力用のデバイスID
 
     Returns:
-        dict: センサーデータ辞書
+        tuple: (sensor_data_dict, offset) - 共通部分のデータと次のオフセット
 
     Raises:
         struct.error: データ解析エラー
     """
-    # data_version (1バイト) + struct tm (36バイト) + センサーデータ
-    # 実デバイスから: 84バイト (79バイト + 5バイトパディング?)
-
     if len(payload) < 70:
-        raise struct.error(f"ペイロードが短すぎます: {len(payload)} バイト (期待: 79以上)")
+        raise struct.error(f"ペイロードが短すぎます: {len(payload)} バイト (期待: 70以上)")
 
-    # デバッグ: ペイロード全体を16進数で出力
     logger.debug(f"[{device_id}] ペイロード長: {len(payload)} バイト")
-    logger.debug(f"[{device_id}] ペイロード(hex): {payload[:84].hex() if len(payload) >= 84 else payload.hex()}")
+    logger.debug(f"[{device_id}] ペイロード(hex): {payload[:100].hex() if len(payload) >= 100 else payload.hex()}")
 
-    # バイナリダンプ表示
-    #print("📄 バイナリダンプ:")
-    #for i in range(0, len(payload), 16):
-    #    hex_part = ' '.join(f'{b:02x}' for b in payload[i:i+16])
-    #    ascii_part = ''.join(chr(b) if 32 <= b < 127 else '.' for b in payload[i:i+16])
-    #    print(f"   {i:04x}: {hex_part:<48} {ascii_part}")
-    #print()
-    
     offset = 0
     # data_version (uint8_t) - 1バイト
     data_version = struct.unpack_from("<B", payload, offset)[0]
@@ -155,12 +146,17 @@ def _parse_sensor_data_v2(payload, device_id):
 
     sensor_error = struct.unpack_from("<B", payload, offset)[0]
     logger.debug(f"   offset {hex(offset)}: sensor_error = {sensor_error}")
-    offset += 4 # センサーエラーの後に3バイトのパディングがある
+    offset += 4  # センサーエラーの後に3バイトのパディングがある
 
-    # 土壌温度 (2 floats = 8バイト)
-    soil_temperature1, soil_temperature2 = struct.unpack_from("<2f", payload, offset)
-    logger.debug(f"   offset {hex(offset)}: soil_temp1={soil_temperature1}, soil_temp2={soil_temperature2}")
-    offset += 8  # 2 floats (8バイト) + 3バイトパディング
+    # 土壌温度 (4 floats = 16バイト) - TMP102 x4
+    soil_temps = struct.unpack_from("<4f", payload, offset)
+    logger.debug(f"   offset {hex(offset)}: soil_temps={soil_temps}")
+    offset += 16
+
+    # 土壌温度センサー数 (uint8_t) + 3バイトパディング
+    soil_temperature_count = struct.unpack_from("<B", payload, offset)[0]
+    logger.debug(f"   offset {hex(offset)}: soil_temperature_count = {soil_temperature_count}")
+    offset += 4  # 1バイト + 3バイトパディング
 
     # FDC1004静電容量データ (4 floats = 16バイト)
     fdc1004_format = f"<{config.FDC1004_CHANNEL_COUNT}f"
@@ -168,7 +164,6 @@ def _parse_sensor_data_v2(payload, device_id):
     logger.debug(f"   offset {hex(offset)}: capacitance={soil_moisture_capacitance}")
     offset += 4 * config.FDC1004_CHANNEL_COUNT
 
-    logger.debug(f"   final offset: {hex(offset)} / {len(payload)}")
     # datetimeオブジェクト作成
     try:
         dt = datetime(datetime_dict['tm_year'] + 1900, datetime_dict['tm_mon'] + 1, datetime_dict['tm_mday'], datetime_dict['tm_hour'], datetime_dict['tm_min'], datetime_dict['tm_sec'])
@@ -180,15 +175,18 @@ def _parse_sensor_data_v2(payload, device_id):
     logger.info(f"[{device_id}] Parsed datetime: {dt_str}")
 
     sensor_data = {
-        'data_version': 2,
+        'data_version': data_version,
         'datetime': dt_str,
         'light_lux': lux,
         'temperature': temperature,
         'humidity': humidity,
         'soil_moisture': soil_moisture,
-        'sensor_error': False,
-        'soil_temperature1': soil_temperature1,
-        'soil_temperature2': soil_temperature2,
+        'sensor_error': bool(sensor_error),
+        'soil_temperature1': soil_temps[0],
+        'soil_temperature2': soil_temps[1],
+        'soil_temperature3': soil_temps[2],
+        'soil_temperature4': soil_temps[3],
+        'soil_temperature_count': soil_temperature_count,
         'capacitance_ch1': soil_moisture_capacitance[0],
         'capacitance_ch2': soil_moisture_capacitance[1],
         'capacitance_ch3': soil_moisture_capacitance[2],
@@ -196,13 +194,84 @@ def _parse_sensor_data_v2(payload, device_id):
         'battery_level': None
     }
 
+    return sensor_data, offset
+
+
+def _parse_sensor_data_v2(payload, device_id):
+    """
+    data_version 2 のセンサーデータをパースする (Rev3用)
+    soil_temperature[4] + soil_temperature_count + soil_moisture_capacitance[4]
+
+    Args:
+        payload: ペイロードデータ
+        device_id: ログ出力用のデバイスID
+
+    Returns:
+        dict: センサーデータ辞書
+    """
+    sensor_data, offset = _parse_sensor_common(payload, device_id)
+    sensor_data['data_version'] = 2
+
+    soil_temps = [sensor_data['soil_temperature1'], sensor_data['soil_temperature2'],
+                  sensor_data['soil_temperature3'], sensor_data['soil_temperature4']]
+    caps = [sensor_data['capacitance_ch1'], sensor_data['capacitance_ch2'],
+            sensor_data['capacitance_ch3'], sensor_data['capacitance_ch4']]
+
     logger.info(
         f"[{device_id}] v2データ解析完了: "
-        f"temp={temperature:.1f}°C, humidity={humidity:.1f}%, "
-        f"soil_temp1={soil_temperature1:.1f}°C, soil_temp2={soil_temperature2:.1f}°C, "
-        f"cap=[{soil_moisture_capacitance[0]:.1f}, {soil_moisture_capacitance[1]:.1f}, {soil_moisture_capacitance[2]:.1f}, {soil_moisture_capacitance[3]:.1f}]pF"
+        f"temp={sensor_data['temperature']:.1f}°C, humidity={sensor_data['humidity']:.1f}%, "
+        f"soil_temps=[{', '.join(f'{t:.1f}' for t in soil_temps)}]°C "
+        f"(count={sensor_data['soil_temperature_count']}), "
+        f"cap=[{', '.join(f'{c:.1f}' for c in caps)}]pF"
     )
 
+    logger.debug(f"   final offset: {hex(offset)} / {len(payload)}")
+    return sensor_data
+
+
+def _parse_sensor_data_v3(payload, device_id):
+    """
+    data_version 3 のセンサーデータをパースする (Rev4用)
+    v2の全フィールド + ext_temperature (DS18B20) + ext_temperature_valid
+
+    Args:
+        payload: ペイロードデータ
+        device_id: ログ出力用のデバイスID
+
+    Returns:
+        dict: センサーデータ辞書
+    """
+    sensor_data, offset = _parse_sensor_common(payload, device_id)
+    sensor_data['data_version'] = 3
+
+    # 拡張温度 (DS18B20) - float (4バイト)
+    ext_temperature = struct.unpack_from("<f", payload, offset)[0]
+    logger.debug(f"   offset {hex(offset)}: ext_temperature = {ext_temperature}")
+    offset += 4
+
+    # 拡張温度有効性フラグ - bool (1バイト)
+    ext_temperature_valid = struct.unpack_from("<B", payload, offset)[0]
+    logger.debug(f"   offset {hex(offset)}: ext_temperature_valid = {ext_temperature_valid}")
+    offset += 1
+
+    sensor_data['ex_temperature'] = ext_temperature if ext_temperature_valid else None
+    sensor_data['ext_temperature_valid'] = bool(ext_temperature_valid)
+
+    soil_temps = [sensor_data['soil_temperature1'], sensor_data['soil_temperature2'],
+                  sensor_data['soil_temperature3'], sensor_data['soil_temperature4']]
+    caps = [sensor_data['capacitance_ch1'], sensor_data['capacitance_ch2'],
+            sensor_data['capacitance_ch3'], sensor_data['capacitance_ch4']]
+
+    logger.info(
+        f"[{device_id}] v3データ解析完了: "
+        f"temp={sensor_data['temperature']:.1f}°C, humidity={sensor_data['humidity']:.1f}%, "
+        f"soil_temps=[{', '.join(f'{t:.1f}' for t in soil_temps)}]°C "
+        f"(count={sensor_data['soil_temperature_count']}), "
+        f"cap=[{', '.join(f'{c:.1f}' for c in caps)}]pF, "
+        f"ext_temp={'%.1f' % ext_temperature if ext_temperature_valid else 'N/A'}°C"
+    )
+
+    logger.debug(f"   final offset: {hex(offset)} / {len(payload)}")
     return sensor_data
 
 class PlantDeviceBLE:
@@ -274,10 +343,140 @@ class PlantDeviceBLE:
         return False
     
     @retry_on_failure()
-    async def set_watering_thresholds(self, dry_threshold_mv, wet_threshold_mv):
+    async def get_system_status(self):
         """
-        水やり閾値をデバイスに書き込みます。
-        リトライ機能とタイムアウト設定を含む。
+        システムステータスを取得する (CMD_GET_SYSTEM_STATUS = 0x02)
+        """
+        if not await self.ensure_connection():
+            raise BleakError(f"デバイス {self.device_id} への接続を確立できませんでした")
+
+        notification_received = asyncio.Event()
+        received_data = None
+
+        def notification_handler(sender: int, data: bytearray):
+            nonlocal received_data
+            logger.debug(f"[{self.device_id}] System Status応答を受信 from {sender}: {data.hex()}")
+            received_data = data
+            notification_received.set()
+
+        try:
+            await self.client.start_notify(RESPONSE_CHAR_UUID, notification_handler)
+
+            self.sequence_num = (self.sequence_num + 1) % 256
+            command_packet = struct.pack('<BBH', CMD_GET_SYSTEM_STATUS, self.sequence_num, 0)
+
+            logger.debug(f"[{self.device_id}] Sending CMD_GET_SYSTEM_STATUS")
+            await self.client.write_gatt_char(COMMAND_CHAR_UUID, command_packet)
+
+            await asyncio.wait_for(notification_received.wait(), timeout=config.BLE_OPERATION_TIMEOUT)
+
+            if received_data is None or len(received_data) < 5:
+                 logger.warning(f"[{self.device_id}] Invalid system status response")
+                 return None
+            
+            resp_id, status_code, resp_seq, data_len = struct.unpack('<BBBH', received_data[:5])
+            if status_code != 0:
+                logger.error(f"[{self.device_id}] CMD_GET_SYSTEM_STATUS error: {status_code}")
+                return None
+
+            payload = received_data[5:]
+            # system_status_t is 24 bytes
+            if len(payload) >= 24:
+                uptime, heap_free, heap_min, task_count, current_time, wifi_connected, ble_connected = \
+                    struct.unpack('<IIIIIBBxx', payload[:24])
+                
+                status = {
+                    'uptime_seconds': uptime,
+                    'heap_free': heap_free,
+                    'heap_min': heap_min,
+                    'task_count': task_count,
+                    'current_time': current_time,
+                    'wifi_connected': bool(wifi_connected),
+                    'ble_connected': bool(ble_connected)
+                }
+                logger.info(f"[{self.device_id}] System Status: {status}")
+                return status
+            else:
+                 logger.warning(f"[{self.device_id}] System status payload too short: {len(payload)}")
+                 return None
+
+        except Exception as e:
+            logger.error(f"[{self.device_id}] get_system_status failed: {e}")
+            raise
+        finally:
+            if self.client.is_connected:
+                await self.client.stop_notify(RESPONSE_CHAR_UUID)
+
+    @retry_on_failure()
+    async def get_plant_profile(self):
+        """
+        植物プロファイルを取得 (CMD_GET_PLANT_PROFILE = 0x0C)
+        """
+        if not await self.ensure_connection():
+            raise BleakError(f"デバイス {self.device_id} への接続を確立できませんでした")
+
+        notification_received = asyncio.Event()
+        received_data = None
+
+        def notification_handler(sender: int, data: bytearray):
+            nonlocal received_data
+            logger.debug(f"[{self.device_id}] Plant Profile応答を受信 from {sender}: {data.hex()}")
+            received_data = data
+            notification_received.set()
+
+        try:
+            await self.client.start_notify(RESPONSE_CHAR_UUID, notification_handler)
+
+            self.sequence_num = (self.sequence_num + 1) % 256
+            command_packet = struct.pack('<BBH', CMD_GET_PLANT_PROFILE, self.sequence_num, 0)
+
+            logger.debug(f"[{self.device_id}] Sending CMD_GET_PLANT_PROFILE")
+            await self.client.write_gatt_char(COMMAND_CHAR_UUID, command_packet)
+
+            await asyncio.wait_for(notification_received.wait(), timeout=config.BLE_OPERATION_TIMEOUT)
+
+            if received_data is None or len(received_data) < 5:
+                 return None
+            
+            resp_id, status_code, resp_seq, data_len = struct.unpack('<BBBH', received_data[:5])
+            if status_code != 0:
+                logger.error(f"[{self.device_id}] CMD_GET_PLANT_PROFILE error: {status_code}")
+                return None
+
+            payload = received_data[5:]
+            # plant_profile_t is 56 bytes (packed)
+            # char[32], float, float, int, float, float, float
+            if len(payload) >= 56:
+                name_bytes, dry, wet, dry_days, temp_high, temp_low, watering = \
+                    struct.unpack('<32sffifff', payload[:56])
+                
+                plant_name = name_bytes.decode('utf-8').rstrip('\x00')
+                profile = {
+                    'plant_name': plant_name,
+                    'soil_dry_threshold': dry,
+                    'soil_wet_threshold': wet,
+                    'soil_dry_days_for_watering': dry_days,
+                    'temp_high_limit': temp_high,
+                    'temp_low_limit': temp_low,
+                    'watering_threshold': watering
+                }
+                logger.info(f"[{self.device_id}] Got Plant Profile: {profile}")
+                return profile
+            else:
+                 logger.warning(f"[{self.device_id}] Plant Profile payload too short: {len(payload)}")
+                 return None
+
+        except Exception as e:
+            logger.error(f"[{self.device_id}] get_plant_profile failed: {e}")
+            raise
+        finally:
+            if self.client.is_connected:
+                await self.client.stop_notify(RESPONSE_CHAR_UUID)
+
+    @retry_on_failure()
+    async def set_plant_profile(self, profile):
+        """
+        植物プロファイルを設定 (CMD_SET_PLANT_PROFILE = 0x03)
         """
         if not await self.ensure_connection():
             raise BleakError(f"デバイス {self.device_id} への接続を確立できませんでした")
@@ -287,52 +486,75 @@ class PlantDeviceBLE:
 
         def notification_handler(sender: int, data: bytearray):
             nonlocal success
-            logger.debug(f"[{self.device_id}] 書き込み応答を受信 from {sender}: {data.hex()}")
+            logger.debug(f"[{self.device_id}] Set Profile応答を受信 from {sender}: {data.hex()}")
             if len(data) >= 3:
                 resp_id, status_code, resp_seq = struct.unpack('<BBB', data[:3])
-                if resp_id == CMD_SET_WATERING_THRESHOLDS and status_code == 0 and resp_seq == self.sequence_num:
+                if resp_id == CMD_SET_PLANT_PROFILE and status_code == 0 and resp_seq == self.sequence_num:
                     success = True
-                    logger.info(f"[{self.device_id}] 閾値設定の確認応答を受信しました")
             notification_received.set()
 
         try:
             await self.client.start_notify(RESPONSE_CHAR_UUID, notification_handler)
 
-            self.sequence_num = (self.sequence_num + 1) % 256
-            payload = struct.pack('<HH', int(dry_threshold_mv), int(wet_threshold_mv))
-            command_packet = struct.pack('<BBH', CMD_SET_WATERING_THRESHOLDS, self.sequence_num, len(payload)) + payload
-
-            logger.info(
-                f"[{self.device_id}] 水やり閾値を {COMMAND_CHAR_UUID} へ書き込み中: "
-                f"Dry={dry_threshold_mv}mV, Wet={wet_threshold_mv}mV"
+            name_bytes = profile['plant_name'].encode('utf-8')[:31].ljust(32, b'\x00')
+            payload = name_bytes + struct.pack('<ffifff', 
+                float(profile['soil_dry_threshold']),
+                float(profile['soil_wet_threshold']),
+                int(profile['soil_dry_days_for_watering']),
+                float(profile['temp_high_limit']),
+                float(profile['temp_low_limit']),
+                float(profile['watering_threshold'])
             )
+
+            self.sequence_num = (self.sequence_num + 1) % 256
+            command_packet = struct.pack('<BBH', CMD_SET_PLANT_PROFILE, self.sequence_num, len(payload)) + payload
+
+            logger.info(f"[{self.device_id}] Sending CMD_SET_PLANT_PROFILE")
             await self.client.write_gatt_char(COMMAND_CHAR_UUID, command_packet)
 
-            logger.debug(
-                f"[{self.device_id}] 書き込み確認を待機中 "
-                f"(タイムアウト: {config.BLE_OPERATION_TIMEOUT}秒)..."
-            )
             await asyncio.wait_for(notification_received.wait(), timeout=config.BLE_OPERATION_TIMEOUT)
 
             if not success:
-                raise BleakError("閾値設定の確認応答が正しく受信されませんでした")
-
+                raise BleakError("プロファイル設定の確認応答が正しく受信されませんでした")
+            
+            logger.info(f"[{self.device_id}] Plant Profile updated successfully")
             return True
 
-        except asyncio.TimeoutError:
-            logger.error(
-                f"[{self.device_id}] 書き込み応答の待機中にタイムアウトしました "
-                f"(タイムアウト: {config.BLE_OPERATION_TIMEOUT}秒)"
-            )
-            self.is_connected = False
-            raise
-        except BleakError as e:
-            logger.error(f"[{self.device_id}] 閾値書き込み中にBLEエラーが発生: {e}")
-            self.is_connected = False
+        except Exception as e:
+            logger.error(f"[{self.device_id}] set_plant_profile failed: {e}")
             raise
         finally:
             if self.client.is_connected:
                 await self.client.stop_notify(RESPONSE_CHAR_UUID)
+
+    @retry_on_failure()
+    async def set_watering_thresholds(self, dry_threshold_mv, wet_threshold_mv):
+        """
+        水やり閾値をデバイスに書き込みます。
+        Rev4では CMD_SET_PLANT_PROFILE (0x03) を使用します。
+        既存のプロファイルを取得し、閾値のみ更新して書き戻します。
+        """
+        logger.info(f"[{self.device_id}] set_watering_thresholds (Legacy Wrapper): Dry={dry_threshold_mv}, Wet={wet_threshold_mv}")
+        
+        try:
+            # 現在のプロファイルを取得
+            profile = await self.get_plant_profile()
+            if not profile:
+                 # プロファイルが取得できない場合、デフォルト値で作成するかエラーにする
+                 # ここではエラーとしてログに残すが、最小限のデフォルトで試行することも可能
+                 logger.error(f"[{self.device_id}] プロファイル取得失敗のため、閾値更新を中止します")
+                 raise BleakError("プロファイル取得失敗")
+            
+            # 閾値を更新
+            profile['soil_dry_threshold'] = dry_threshold_mv
+            profile['soil_wet_threshold'] = wet_threshold_mv
+            
+            # プロファイルを書き戻し
+            return await self.set_plant_profile(profile)
+
+        except Exception as e:
+            logger.error(f"[{self.device_id}] set_watering_thresholds failed: {e}")
+            raise
 
     @retry_on_failure()
     async def control_led(self, red: int, green: int, blue: int, brightness: int, duration_ms: int = 0):
@@ -450,7 +672,7 @@ class PlantDeviceBLE:
                 logger.error(f"[{self.device_id}] ペイロード長の不一致。ヘッダー: {data_len}, 実際: {len(payload)}")
                 raise BleakError(f"ペイロード長の不一致: 期待 {data_len}, 実際 {len(payload)}")
 
-            # v1デバイス処理 (既存コード - 変更なし)
+            # v1デバイス処理 (data_versionフィールドなし、固定56バイト)
             if data_len == 56:
                 unpacked_data = struct.unpack('<9i4f?3x', payload)
 
@@ -462,11 +684,11 @@ class PlantDeviceBLE:
 
                 sensor_data = {
                     'data_version': 1,
-                    'datetime': dt_str, 
-                    'light_lux': lux, 
+                    'datetime': dt_str,
+                    'light_lux': lux,
                     'temperature': temp,
-                    'humidity': humidity, 
-                    'soil_moisture': soil, 
+                    'humidity': humidity,
+                    'soil_moisture': soil,
                     'sensor_error': error,
                     'battery_level': None
                 }
@@ -474,16 +696,23 @@ class PlantDeviceBLE:
                 logger.info(f"[{self.device_id}] v1センサーデータの解析に成功: {sensor_data}")
                 return sensor_data
 
-            # v2デバイス処理 (PlantMonitor_30用 - 新規追加)
+            # v2/v3デバイス処理 (data_versionバイトで判別)
             elif data_len > 70:
-                logger.info(f"[{self.device_id}] data_version 2 形式のデータを検出しました ({data_len}バイト)")
+                # 先頭バイトからdata_versionを読み取り
+                payload_data_version = struct.unpack_from("<B", payload, 0)[0]
+                logger.info(f"[{self.device_id}] data_version={payload_data_version} のデータを検出しました ({data_len}バイト)")
+
                 try:
-                    sensor_data = _parse_sensor_data_v2(payload, self.device_id)
-                    logger.info(f"[{self.device_id}] v2センサーデータの解析に成功")
+                    if payload_data_version == 3:
+                        sensor_data = _parse_sensor_data_v3(payload, self.device_id)
+                        logger.info(f"[{self.device_id}] v3センサーデータの解析に成功")
+                    else:
+                        sensor_data = _parse_sensor_data_v2(payload, self.device_id)
+                        logger.info(f"[{self.device_id}] v2センサーデータの解析に成功")
                     return sensor_data
                 except struct.error as e:
-                    logger.error(f"[{self.device_id}] v2データの解析に失敗: {e}")
-                    raise BleakError(f"v2データ解析エラー: {e}")
+                    logger.error(f"[{self.device_id}] v{payload_data_version}データの解析に失敗: {e}")
+                    raise BleakError(f"v{payload_data_version}データ解析エラー: {e}")
 
             else:
                 logger.error(f"[{self.device_id}] サポートされていないペイロード長: {data_len}")

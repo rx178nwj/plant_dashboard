@@ -65,13 +65,13 @@ def update_device_status(device_id, status, battery=None):
 def save_sensor_data(device_id, timestamp, data, data_version=1):
     """
     センサーデータをDBに保存します。
-    data_versionに応じてv1/v2デバイスのデータに対応。
+    data_versionに応じてv1/v2/v3デバイスのデータに対応。
 
     Args:
         device_id: デバイスID
         timestamp: タイムスタンプ (ISO形式文字列)
         data: センサーデータ辞書
-        data_version: データバージョン (1=v1デバイス, 2=v2デバイス)
+        data_version: データバージョン (1=Rev1/Rev2, 2=Rev3, 3=Rev4)
     """
     if not data:
         return
@@ -94,11 +94,40 @@ def save_sensor_data(device_id, timestamp, data, data_version=1):
         formatted_timestamp = datetime.now(JST).strftime("%Y-%m-%d %H:%M:%S")
 
     try:
-        
-        # v2デバイスのカラム
-        if data_version == 2:
-            extended_columns = "(device_id, timestamp, temperature, humidity, light_lux, soil_moisture, data_version, soil_temperature1, soil_temperature2, capacitance_ch1, capacitance_ch2, capacitance_ch3, capacitance_ch4)"
-            extended_values = "?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?"
+
+        # v3デバイスのカラム (Rev4: v2 + ex_temperature)
+        if data_version == 3:
+            columns = "(device_id, timestamp, temperature, humidity, light_lux, soil_moisture, data_version, soil_temperature1, soil_temperature2, soil_temperature3, soil_temperature4, ex_temperature, capacitance_ch1, capacitance_ch2, capacitance_ch3, capacitance_ch4)"
+            values = "?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?"
+            row_data = (
+                device_id,
+                formatted_timestamp,
+                data.get('temperature'),
+                data.get('humidity'),
+                data.get('light_lux'),
+                data.get('soil_moisture'),
+                data_version,
+                data.get('soil_temperature1'),
+                data.get('soil_temperature2'),
+                data.get('soil_temperature3'),
+                data.get('soil_temperature4'),
+                data.get('ex_temperature'),
+                data.get('capacitance_ch1'),
+                data.get('capacitance_ch2'),
+                data.get('capacitance_ch3'),
+                data.get('capacitance_ch4')
+            )
+
+            conn.execute(
+                f"INSERT INTO sensor_data {columns} VALUES ({values})",
+                row_data
+            )
+            logger.info(f"Saved v3 sensor data for {device_id} at {formatted_timestamp}")
+
+        # v2デバイスのカラム (Rev3: soil_temperature1-4 + capacitance)
+        elif data_version == 2:
+            extended_columns = "(device_id, timestamp, temperature, humidity, light_lux, soil_moisture, data_version, soil_temperature1, soil_temperature2, soil_temperature3, soil_temperature4, capacitance_ch1, capacitance_ch2, capacitance_ch3, capacitance_ch4)"
+            extended_values = "?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?"
             extended_data = (
                 device_id,
                 formatted_timestamp,
@@ -109,6 +138,8 @@ def save_sensor_data(device_id, timestamp, data, data_version=1):
                 data_version,
                 data.get('soil_temperature1'),
                 data.get('soil_temperature2'),
+                data.get('soil_temperature3'),
+                data.get('soil_temperature4'),
                 data.get('capacitance_ch1'),
                 data.get('capacitance_ch2'),
                 data.get('capacitance_ch3'),
