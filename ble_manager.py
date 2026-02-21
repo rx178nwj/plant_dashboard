@@ -107,8 +107,20 @@ def _parse_tm_data_t(data, offset):
 
 def _parse_sensor_common(payload, device_id):
     """
-    data_version 2/3 共通のセンサーデータをパースする。
+    data_version 2/3 共通のセンサーデータをパースする (非packed、コンパイラパディングあり)。
     soil_temperature[4] + soil_temperature_count + soil_moisture_capacitance[4] まで読み取る。
+    soil_temperature_count に基づき、存在しないセンサーの値は None にする。
+
+    メモリレイアウト (soil_data_t, 非packed):
+      offset  0: uint8_t  data_version         (1B + 3B padding)
+      offset  4: struct tm datetime             (36B)
+      offset 40: float    lux, temperature, humidity, soil_moisture (16B)
+      offset 56: bool     sensor_error          (1B + 3B padding)
+      offset 60: float    soil_temperature[4]   (16B)
+      offset 76: uint8_t  soil_temperature_count(1B + 3B padding)
+      offset 80: float    soil_moisture_cap[4]  (16B)
+      offset 96: (v3のみ: ext_temperature, ext_temperature_valid)
+    共通部分合計: 96バイト
 
     Args:
         payload: ペイロードデータ
@@ -120,49 +132,54 @@ def _parse_sensor_common(payload, device_id):
     Raises:
         struct.error: データ解析エラー
     """
-    if len(payload) < 70:
-        raise struct.error(f"ペイロードが短すぎます: {len(payload)} バイト (期待: 70以上)")
+    # 共通部分の最小サイズ: 96バイト
+    if len(payload) < 96:
+        raise struct.error(f"ペイロードが短すぎます: {len(payload)} バイト (期待: 96以上)")
 
     logger.debug(f"[{device_id}] ペイロード長: {len(payload)} バイト")
-    logger.debug(f"[{device_id}] ペイロード(hex): {payload[:100].hex() if len(payload) >= 100 else payload.hex()}")
+    logger.debug(f"[{device_id}] ペイロード(hex): {payload[:104].hex() if len(payload) >= 104 else payload.hex()}")
 
     offset = 0
-    # data_version (uint8_t) - 1バイト
+    # offset 0: data_version (uint8_t) + 3バイトパディング
     data_version = struct.unpack_from("<B", payload, offset)[0]
-    logger.debug(f"   offset {hex(offset)}: data_version = {data_version}")
-    offset += 1
+    logger.debug(f"   offset {offset} (0x{offset:02x}): data_version = {data_version}")
+    offset += 4  # 1B + 3B padding
 
-    # 構造体アライメントのため3バイトのパディングがある
-    offset += 3
-
-    # datetime (tm_data_t - 36バイト = 9 x 4バイトint)
+    # offset 4: datetime (struct tm = 9 x int32 = 36バイト)
     datetime_dict, offset = _parse_tm_data_t(payload, offset)
-    logger.debug(f"   offset after tm_data_t: {hex(offset)}")
+    logger.debug(f"   offset after tm_data_t: {offset} (0x{offset:02x})")
 
-    # センサーデータ (4 floats = 16バイト)
+    # offset 40: lux, temperature, humidity, soil_moisture (4 floats = 16バイト)
     lux, temperature, humidity, soil_moisture = struct.unpack_from("<4f", payload, offset)
-    logger.debug(f"   offset {hex(offset)}: lux={lux}, temp={temperature}, hum={humidity}, soil_moist={soil_moisture}")
+    logger.debug(f"   offset {offset} (0x{offset:02x}): lux={lux}, temp={temperature}, hum={humidity}, soil_moist={soil_moisture}")
     offset += 16
 
+    # offset 56: sensor_error (bool 1B) + 3バイトパディング
     sensor_error = struct.unpack_from("<B", payload, offset)[0]
-    logger.debug(f"   offset {hex(offset)}: sensor_error = {sensor_error}")
-    offset += 4  # センサーエラーの後に3バイトのパディングがある
+    logger.debug(f"   offset {offset} (0x{offset:02x}): sensor_error = {sensor_error}")
+    offset += 4  # 1B + 3B padding
 
-    # 土壌温度 (4 floats = 16バイト) - TMP102 x4
-    soil_temps = struct.unpack_from("<4f", payload, offset)
-    logger.debug(f"   offset {hex(offset)}: soil_temps={soil_temps}")
+    # offset 60: soil_temperature[4] (4 floats = 16バイト)
+    soil_temps_raw = struct.unpack_from("<4f", payload, offset)
+    logger.debug(f"   offset {offset} (0x{offset:02x}): soil_temps_raw={soil_temps_raw}")
     offset += 16
 
-    # 土壌温度センサー数 (uint8_t) + 3バイトパディング
+    # offset 76: soil_temperature_count (uint8_t) + 3バイトパディング
     soil_temperature_count = struct.unpack_from("<B", payload, offset)[0]
-    logger.debug(f"   offset {hex(offset)}: soil_temperature_count = {soil_temperature_count}")
-    offset += 4  # 1バイト + 3バイトパディング
+    logger.debug(f"   offset {offset} (0x{offset:02x}): soil_temperature_count = {soil_temperature_count}")
+    offset += 4  # 1B + 3B padding
 
-    # FDC1004静電容量データ (4 floats = 16バイト)
-    fdc1004_format = f"<{config.FDC1004_CHANNEL_COUNT}f"
-    soil_moisture_capacitance = struct.unpack_from(fdc1004_format, payload, offset)
-    logger.debug(f"   offset {hex(offset)}: capacitance={soil_moisture_capacitance}")
-    offset += 4 * config.FDC1004_CHANNEL_COUNT
+    # offset 80: soil_moisture_capacitance[4] (4 floats = 16バイト)
+    soil_moisture_capacitance = struct.unpack_from("<4f", payload, offset)
+    logger.debug(f"   offset {offset} (0x{offset:02x}): capacitance={soil_moisture_capacitance}")
+    offset += 16
+    # offset 96: 共通部分終了
+
+    # soil_temperature_count に基づき、存在しないセンサーの値を None にする
+    soil_temps = [
+        soil_temps_raw[i] if i < soil_temperature_count else None
+        for i in range(4)
+    ]
 
     # datetimeオブジェクト作成
     try:
@@ -197,10 +214,20 @@ def _parse_sensor_common(payload, device_id):
     return sensor_data, offset
 
 
+def _format_soil_temps_log(sensor_data):
+    """soil_temperature_countに基づいて土壌温度のログ文字列を生成"""
+    count = sensor_data['soil_temperature_count']
+    temps = [sensor_data[f'soil_temperature{i+1}'] for i in range(4)]
+    return ', '.join(
+        f'{temps[i]:.1f}' if i < count else 'N/A'
+        for i in range(4)
+    )
+
+
 def _parse_sensor_data_v2(payload, device_id):
     """
-    data_version 2 のセンサーデータをパースする (Rev3用)
-    soil_temperature[4] + soil_temperature_count + soil_moisture_capacitance[4]
+    data_version 2 のセンサーデータをパースする (Rev3用, 非packed)
+    共通部分96バイト: soil_temperature[4] + soil_temperature_count + soil_moisture_capacitance[4]
 
     Args:
         payload: ペイロードデータ
@@ -212,27 +239,34 @@ def _parse_sensor_data_v2(payload, device_id):
     sensor_data, offset = _parse_sensor_common(payload, device_id)
     sensor_data['data_version'] = 2
 
-    soil_temps = [sensor_data['soil_temperature1'], sensor_data['soil_temperature2'],
-                  sensor_data['soil_temperature3'], sensor_data['soil_temperature4']]
     caps = [sensor_data['capacitance_ch1'], sensor_data['capacitance_ch2'],
             sensor_data['capacitance_ch3'], sensor_data['capacitance_ch4']]
 
     logger.info(
         f"[{device_id}] v2データ解析完了: "
         f"temp={sensor_data['temperature']:.1f}°C, humidity={sensor_data['humidity']:.1f}%, "
-        f"soil_temps=[{', '.join(f'{t:.1f}' for t in soil_temps)}]°C "
+        f"soil_temps=[{_format_soil_temps_log(sensor_data)}]°C "
         f"(count={sensor_data['soil_temperature_count']}), "
         f"cap=[{', '.join(f'{c:.1f}' for c in caps)}]pF"
     )
 
-    logger.debug(f"   final offset: {hex(offset)} / {len(payload)}")
+    logger.debug(f"   final offset: {offset} (0x{offset:02x}) / {len(payload)}")
     return sensor_data
+
+
+# soil_data_v3 合計サイズ: 104バイト (共通96B + ext_temperature 4B + ext_temperature_valid 1B + 3B padding)
+SOIL_DATA_V3_SIZE = 104
 
 
 def _parse_sensor_data_v3(payload, device_id):
     """
-    data_version 3 のセンサーデータをパースする (Rev4用)
-    v2の全フィールド + ext_temperature (DS18B20) + ext_temperature_valid
+    data_version 3 のセンサーデータをパースする (Rev4用, 非packed)
+    共通部分96バイト + ext_temperature (DS18B20) + ext_temperature_valid + padding = 104バイト
+
+    メモリレイアウト (v3追加分):
+      offset 96: float    ext_temperature       (4B)
+      offset100: bool     ext_temperature_valid  (1B + 3B padding)
+      合計: 104バイト
 
     Args:
         payload: ペイロードデータ
@@ -241,37 +275,38 @@ def _parse_sensor_data_v3(payload, device_id):
     Returns:
         dict: センサーデータ辞書
     """
+    if len(payload) < SOIL_DATA_V3_SIZE:
+        raise struct.error(f"v3ペイロードが短すぎます: {len(payload)} バイト (期待: {SOIL_DATA_V3_SIZE})")
+
     sensor_data, offset = _parse_sensor_common(payload, device_id)
     sensor_data['data_version'] = 3
 
-    # 拡張温度 (DS18B20) - float (4バイト)
+    # offset 96: 拡張温度 (DS18B20) - float (4バイト)
     ext_temperature = struct.unpack_from("<f", payload, offset)[0]
-    logger.debug(f"   offset {hex(offset)}: ext_temperature = {ext_temperature}")
+    logger.debug(f"   offset {offset} (0x{offset:02x}): ext_temperature = {ext_temperature}")
     offset += 4
 
-    # 拡張温度有効性フラグ - bool (1バイト)
+    # offset 100: 拡張温度有効性フラグ - bool (1バイト) + 3バイトパディング
     ext_temperature_valid = struct.unpack_from("<B", payload, offset)[0]
-    logger.debug(f"   offset {hex(offset)}: ext_temperature_valid = {ext_temperature_valid}")
-    offset += 1
+    logger.debug(f"   offset {offset} (0x{offset:02x}): ext_temperature_valid = {ext_temperature_valid}")
+    offset += 4  # 1B + 3B padding → 合計104バイト
 
     sensor_data['ex_temperature'] = ext_temperature if ext_temperature_valid else None
     sensor_data['ext_temperature_valid'] = bool(ext_temperature_valid)
 
-    soil_temps = [sensor_data['soil_temperature1'], sensor_data['soil_temperature2'],
-                  sensor_data['soil_temperature3'], sensor_data['soil_temperature4']]
     caps = [sensor_data['capacitance_ch1'], sensor_data['capacitance_ch2'],
             sensor_data['capacitance_ch3'], sensor_data['capacitance_ch4']]
 
     logger.info(
         f"[{device_id}] v3データ解析完了: "
         f"temp={sensor_data['temperature']:.1f}°C, humidity={sensor_data['humidity']:.1f}%, "
-        f"soil_temps=[{', '.join(f'{t:.1f}' for t in soil_temps)}]°C "
+        f"soil_temps=[{_format_soil_temps_log(sensor_data)}]°C "
         f"(count={sensor_data['soil_temperature_count']}), "
         f"cap=[{', '.join(f'{c:.1f}' for c in caps)}]pF, "
         f"ext_temp={'%.1f' % ext_temperature if ext_temperature_valid else 'N/A'}°C"
     )
 
-    logger.debug(f"   final offset: {hex(offset)} / {len(payload)}")
+    logger.debug(f"   final offset: {offset} (0x{offset:02x}) / {len(payload)}")
     return sensor_data
 
 class PlantDeviceBLE:

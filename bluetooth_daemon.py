@@ -421,6 +421,10 @@ async def main_loop():
 
             logger.info(f"{len(devices_to_poll)} 個のデバイスのデータ収集サイクルを開始します。")
 
+            # サイクル内のタイムアウト追跡
+            cycle_plant_sensor_count = 0
+            cycle_timeout_count = 0
+
             for device in devices_to_poll:
                 dev_id = device.get('device_id')
                 device_type = device.get('device_type')
@@ -434,6 +438,7 @@ async def main_loop():
 
                 try:
                     if device_type == 'plant_sensor':
+                        cycle_plant_sensor_count += 1
                         if dev_id not in plant_sensor_connections:
                             plant_sensor_connections[dev_id] = PlantDeviceBLE(mac_address, dev_id)
                         ble_device = plant_sensor_connections[dev_id]
@@ -457,9 +462,29 @@ async def main_loop():
                     }
                     write_to_pipe(pipe_data)
 
-                    # 成功カウント（データがNoneでも接続は成功とみなす）
-                    success_count += 1
-                    bt_connection_tracker.record_result(True)
+                    # plant_sensorでデータ取得失敗（retry_on_failureがNoneを返した場合）
+                    if device_type == 'plant_sensor' and sensor_data is None:
+                        cycle_timeout_count += 1
+                        error_count += 1
+                        ble_error_count += 1
+                        bt_connection_tracker.record_result(False)
+                        logger.warning(f"{dev_id} のセンサーデータ取得に失敗しました（リトライ上限到達）")
+                    else:
+                        success_count += 1
+                        bt_connection_tracker.record_result(True)
+
+                except (asyncio.TimeoutError, BleakError) as e:
+                    error_count += 1
+                    ble_error_count += 1
+                    bt_connection_tracker.record_result(False)
+                    if device_type == 'plant_sensor':
+                        cycle_timeout_count += 1
+                    logger.error(f"{dev_id} のBLE通信がタイムアウトしました: {e}", exc_info=True)
+                    write_to_pipe({
+                        "device_id": dev_id,
+                        "timestamp": datetime.now().isoformat(),
+                        "error": str(e)
+                    })
 
                 except Exception as e:
                     error_count += 1
@@ -474,6 +499,18 @@ async def main_loop():
                     })
 
                 await asyncio.sleep(2) # デバイス間のポーリングに短い遅延
+
+            # 全plant_sensorデバイスがタイムアウトした場合、Bluetoothデーモンを即座にリセット
+            if cycle_plant_sensor_count > 0 and cycle_timeout_count >= cycle_plant_sensor_count:
+                logger.warning(
+                    f"全plant_sensorデバイス({cycle_plant_sensor_count}台)がタイムアウトしました。"
+                    f"Bluetoothデーモンをリセットします。"
+                )
+                bt_connection_tracker.restart_bluetooth()
+                plant_sensor_connections.clear()
+                logger.info("Bluetoothリセット後、15秒間待機します...")
+                await asyncio.sleep(15)
+                continue
 
             # Bluetooth接続成功率をチェックし、必要なら再起動
             if bt_connection_tracker.should_restart_bluetooth():

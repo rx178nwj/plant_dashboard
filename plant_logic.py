@@ -72,7 +72,14 @@ class PlantStateAnalyzer:
                     MAX(light_lux) as daily_light_max, MIN(light_lux) as daily_light_min, AVG(light_lux) as daily_light_ave,
                     MAX(soil_moisture) as daily_soil_moisture_max, MIN(soil_moisture) as daily_soil_moisture_min, AVG(soil_moisture) as daily_soil_moisture_ave,
                     MAX(soil_temperature1) as daily_soil_temp1_max, MIN(soil_temperature1) as daily_soil_temp1_min, AVG(soil_temperature1) as daily_soil_temp1_ave,
-                    MAX(soil_temperature2) as daily_soil_temp2_max, MIN(soil_temperature2) as daily_soil_temp2_min, AVG(soil_temperature2) as daily_soil_temp2_ave
+                    MAX(soil_temperature2) as daily_soil_temp2_max, MIN(soil_temperature2) as daily_soil_temp2_min, AVG(soil_temperature2) as daily_soil_temp2_ave,
+                    MAX(soil_temperature3) as daily_soil_temp3_max, MIN(soil_temperature3) as daily_soil_temp3_min, AVG(soil_temperature3) as daily_soil_temp3_ave,
+                    MAX(soil_temperature4) as daily_soil_temp4_max, MIN(soil_temperature4) as daily_soil_temp4_min, AVG(soil_temperature4) as daily_soil_temp4_ave,
+                    MAX(capacitance_ch1) as daily_capacitance_ch1_max, MIN(capacitance_ch1) as daily_capacitance_ch1_min, AVG(capacitance_ch1) as daily_capacitance_ch1_ave,
+                    MAX(capacitance_ch2) as daily_capacitance_ch2_max, MIN(capacitance_ch2) as daily_capacitance_ch2_min, AVG(capacitance_ch2) as daily_capacitance_ch2_ave,
+                    MAX(capacitance_ch3) as daily_capacitance_ch3_max, MIN(capacitance_ch3) as daily_capacitance_ch3_min, AVG(capacitance_ch3) as daily_capacitance_ch3_ave,
+                    MAX(capacitance_ch4) as daily_capacitance_ch4_max, MIN(capacitance_ch4) as daily_capacitance_ch4_min, AVG(capacitance_ch4) as daily_capacitance_ch4_ave,
+                    MAX(ex_temperature) as daily_ex_temperature_max, MIN(ex_temperature) as daily_ex_temperature_min, AVG(ex_temperature) as daily_ex_temperature_ave
                 FROM sensor_data WHERE device_id = ? AND timestamp BETWEEN ? AND ?
             """
             soil_summary = self.conn.execute(soil_agg_query, (soil_sensor_id, start_of_day, end_of_day)).fetchone()
@@ -126,8 +133,15 @@ class PlantStateAnalyzer:
                 daily_light_ave, daily_soil_moisture_max, daily_soil_moisture_min, daily_soil_moisture_ave,
                 daily_soil_temp1_max, daily_soil_temp1_min, daily_soil_temp1_ave,
                 daily_soil_temp2_max, daily_soil_temp2_min, daily_soil_temp2_ave,
+                daily_soil_temp3_max, daily_soil_temp3_min, daily_soil_temp3_ave,
+                daily_soil_temp4_max, daily_soil_temp4_min, daily_soil_temp4_ave,
+                daily_capacitance_ch1_max, daily_capacitance_ch1_min, daily_capacitance_ch1_ave,
+                daily_capacitance_ch2_max, daily_capacitance_ch2_min, daily_capacitance_ch2_ave,
+                daily_capacitance_ch3_max, daily_capacitance_ch3_min, daily_capacitance_ch3_ave,
+                daily_capacitance_ch4_max, daily_capacitance_ch4_min, daily_capacitance_ch4_ave,
+                daily_ex_temperature_max, daily_ex_temperature_min, daily_ex_temperature_ave,
                 daily_watering_events, growth_period, survival_limit_status, watering_advice, watering_status, analysis_log
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(managed_plant_id, analysis_date) DO UPDATE SET
                 daily_temp_max=excluded.daily_temp_max, daily_temp_min=excluded.daily_temp_min, daily_temp_ave=excluded.daily_temp_ave,
                 daily_humidity_max=excluded.daily_humidity_max, daily_humidity_min=excluded.daily_humidity_min, daily_humidity_ave=excluded.daily_humidity_ave,
@@ -135,6 +149,13 @@ class PlantStateAnalyzer:
                 daily_soil_moisture_max=excluded.daily_soil_moisture_max, daily_soil_moisture_min=excluded.daily_soil_moisture_min, daily_soil_moisture_ave=excluded.daily_soil_moisture_ave,
                 daily_soil_temp1_max=excluded.daily_soil_temp1_max, daily_soil_temp1_min=excluded.daily_soil_temp1_min, daily_soil_temp1_ave=excluded.daily_soil_temp1_ave,
                 daily_soil_temp2_max=excluded.daily_soil_temp2_max, daily_soil_temp2_min=excluded.daily_soil_temp2_min, daily_soil_temp2_ave=excluded.daily_soil_temp2_ave,
+                daily_soil_temp3_max=excluded.daily_soil_temp3_max, daily_soil_temp3_min=excluded.daily_soil_temp3_min, daily_soil_temp3_ave=excluded.daily_soil_temp3_ave,
+                daily_soil_temp4_max=excluded.daily_soil_temp4_max, daily_soil_temp4_min=excluded.daily_soil_temp4_min, daily_soil_temp4_ave=excluded.daily_soil_temp4_ave,
+                daily_capacitance_ch1_max=excluded.daily_capacitance_ch1_max, daily_capacitance_ch1_min=excluded.daily_capacitance_ch1_min, daily_capacitance_ch1_ave=excluded.daily_capacitance_ch1_ave,
+                daily_capacitance_ch2_max=excluded.daily_capacitance_ch2_max, daily_capacitance_ch2_min=excluded.daily_capacitance_ch2_min, daily_capacitance_ch2_ave=excluded.daily_capacitance_ch2_ave,
+                daily_capacitance_ch3_max=excluded.daily_capacitance_ch3_max, daily_capacitance_ch3_min=excluded.daily_capacitance_ch3_min, daily_capacitance_ch3_ave=excluded.daily_capacitance_ch3_ave,
+                daily_capacitance_ch4_max=excluded.daily_capacitance_ch4_max, daily_capacitance_ch4_min=excluded.daily_capacitance_ch4_min, daily_capacitance_ch4_ave=excluded.daily_capacitance_ch4_ave,
+                daily_ex_temperature_max=excluded.daily_ex_temperature_max, daily_ex_temperature_min=excluded.daily_ex_temperature_min, daily_ex_temperature_ave=excluded.daily_ex_temperature_ave,
                 daily_watering_events=excluded.daily_watering_events, growth_period=excluded.growth_period,
                 survival_limit_status=excluded.survival_limit_status, watering_advice=excluded.watering_advice,
                 watering_status=excluded.watering_status, analysis_log=excluded.analysis_log
@@ -146,6 +167,13 @@ class PlantStateAnalyzer:
             sensor_summary.get('daily_soil_moisture_max'), sensor_summary.get('daily_soil_moisture_min'), sensor_summary.get('daily_soil_moisture_ave'),
             sensor_summary.get('daily_soil_temp1_max'), sensor_summary.get('daily_soil_temp1_min'), sensor_summary.get('daily_soil_temp1_ave'),
             sensor_summary.get('daily_soil_temp2_max'), sensor_summary.get('daily_soil_temp2_min'), sensor_summary.get('daily_soil_temp2_ave'),
+            sensor_summary.get('daily_soil_temp3_max'), sensor_summary.get('daily_soil_temp3_min'), sensor_summary.get('daily_soil_temp3_ave'),
+            sensor_summary.get('daily_soil_temp4_max'), sensor_summary.get('daily_soil_temp4_min'), sensor_summary.get('daily_soil_temp4_ave'),
+            sensor_summary.get('daily_capacitance_ch1_max'), sensor_summary.get('daily_capacitance_ch1_min'), sensor_summary.get('daily_capacitance_ch1_ave'),
+            sensor_summary.get('daily_capacitance_ch2_max'), sensor_summary.get('daily_capacitance_ch2_min'), sensor_summary.get('daily_capacitance_ch2_ave'),
+            sensor_summary.get('daily_capacitance_ch3_max'), sensor_summary.get('daily_capacitance_ch3_min'), sensor_summary.get('daily_capacitance_ch3_ave'),
+            sensor_summary.get('daily_capacitance_ch4_max'), sensor_summary.get('daily_capacitance_ch4_min'), sensor_summary.get('daily_capacitance_ch4_ave'),
+            sensor_summary.get('daily_ex_temperature_max'), sensor_summary.get('daily_ex_temperature_min'), sensor_summary.get('daily_ex_temperature_ave'),
             sensor_summary.get('daily_watering_events', 0),
             new_growth_period, new_survival_status, new_watering_advice, new_watering_status, json.dumps(final_log)
         ))
