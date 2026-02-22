@@ -119,24 +119,50 @@ class BluetoothConnectionTracker:
         )
 
         try:
+            # Step 1: 通常の bluetooth 再起動を試みる
             result = subprocess.run(
                 ['sudo', 'systemctl', 'restart', 'bluetooth'],
-                capture_output=True,
-                text=True,
-                timeout=30
+                capture_output=True, text=True, timeout=30
             )
-            
+
             # 再起動を試みたのでカウントアップ（成功・失敗に関わらず）
             self.consecutive_restarts += 1
             self.last_restart_time = datetime.now()
-            
+
             if result.returncode == 0:
                 logger.info("Bluetoothサービスを正常に再起動しました。接続履歴をリセットします。")
                 self.history.clear()
                 return True
-            else:
-                logger.error(f"Bluetoothサービスの再起動に失敗しました: {result.stderr}")
+
+            # Step 2: 失敗した場合 → bluetoothd が D-Bus でデッドロックしている可能性
+            # "Name already in use" エラーは D-Bus に stale な org.bluez 接続が残っている状態
+            logger.warning(
+                f"bluetooth restart 失敗: {result.stderr.strip()} "
+                f"→ D-Bus stale 接続をクリアして再試行します。"
+            )
+            dbus_reload = subprocess.run(
+                ['sudo', 'systemctl', 'reload', 'dbus'],
+                capture_output=True, text=True, timeout=15
+            )
+            if dbus_reload.returncode != 0:
+                logger.error(f"dbus reload 失敗: {dbus_reload.stderr.strip()}")
                 return False
+
+            import time as _time
+            _time.sleep(2)
+
+            retry = subprocess.run(
+                ['sudo', 'systemctl', 'start', 'bluetooth'],
+                capture_output=True, text=True, timeout=30
+            )
+            if retry.returncode == 0:
+                logger.info("dbus reload 後に Bluetooth サービスを起動しました。接続履歴をリセットします。")
+                self.history.clear()
+                return True
+            else:
+                logger.error(f"dbus reload 後の bluetooth 起動も失敗しました: {retry.stderr.strip()}")
+                return False
+
         except subprocess.TimeoutExpired:
             logger.error("Bluetoothサービスの再起動がタイムアウトしました")
             self.consecutive_restarts += 1
