@@ -45,17 +45,43 @@
                             <i class="bi bi-moisture text-success"></i> Soil Moisture<br>
                             <span class="fs-5 fw-bold">{{ sensor_data.soil_moisture | round(2) if sensor_data and 'soil_moisture' in sensor_data and sensor_data.soil_moisture is not none else '--' }}</span>
                         </div>
-                        {% if sensor_data.soil_temperature1 is not none %}
-                        <div class="col-6">
-                            <i class="bi bi-thermometer text-info"></i> Soil Temp1<br>
-                            <span class="fs-5 fw-bold">{{ sensor_data.soil_temperature1 | round(1) }}</span> °C
+
+                        <!-- Soil Moisture 4ch (capacitance) -->
+                        {% set cap_labels = ['Ch1', 'Ch2', 'Ch3', 'Ch4'] %}
+                        {% set cap_keys = ['capacitance_ch1', 'capacitance_ch2', 'capacitance_ch3', 'capacitance_ch4'] %}
+                        {% set has_any_cap = sensor_data and (sensor_data.capacitance_ch1 is not none or sensor_data.capacitance_ch2 is not none or sensor_data.capacitance_ch3 is not none or sensor_data.capacitance_ch4 is not none) %}
+                        {% if has_any_cap %}
+                        <div class="col-12 mb-1">
+                            <hr class="my-1">
+                            <small class="text-muted"><i class="bi bi-moisture text-success"></i> Soil Moisture (pF)</small>
+                        </div>
+                        {% for key, label in [('capacitance_ch1','Ch1'),('capacitance_ch2','Ch2'),('capacitance_ch3','Ch3'),('capacitance_ch4','Ch4')] %}
+                        {% set val = sensor_data[key] if sensor_data and key in sensor_data else none %}
+                        {% if val is not none %}
+                        <div class="col-3 mb-2 text-center">
+                            <small class="text-muted d-block">{{ label }}</small>
+                            <span class="fs-6 fw-bold text-success">{{ val | round(1) }}</span>
                         </div>
                         {% endif %}
-                        {% if sensor_data.soil_temperature2 is not none %}
-                        <div class="col-6">
-                            <i class="bi bi-thermometer text-info"></i> Soil Temp2<br>
-                            <span class="fs-5 fw-bold">{{ sensor_data.soil_temperature2 | round(1) }}</span> °C
+                        {% endfor %}
+                        {% endif %}
+
+                        <!-- Soil Temperature 1〜4 -->
+                        {% set has_any_soil_temp = sensor_data and (sensor_data.soil_temperature1 is not none or sensor_data.soil_temperature2 is not none or sensor_data.soil_temperature3 is not none or sensor_data.soil_temperature4 is not none) %}
+                        {% if has_any_soil_temp %}
+                        <div class="col-12 mb-1">
+                            <hr class="my-1">
+                            <small class="text-muted"><i class="bi bi-thermometer text-info"></i> Soil Temp (°C)</small>
                         </div>
+                        {% for key, label in [('soil_temperature1','Ch1'),('soil_temperature2','Ch2'),('soil_temperature3','Ch3'),('soil_temperature4','Ch4')] %}
+                        {% set val = sensor_data[key] if sensor_data and key in sensor_data else none %}
+                        {% if val is not none %}
+                        <div class="col-3 mb-2 text-center">
+                            <small class="text-muted d-block">{{ label }}</small>
+                            <span class="fs-6 fw-bold text-info">{{ val | round(1) }}</span>
+                        </div>
+                        {% endif %}
+                        {% endfor %}
                         {% endif %}
                         {% endif %}
                     </div>

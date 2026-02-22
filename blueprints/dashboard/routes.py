@@ -66,7 +66,11 @@ def get_plant_centric_data(selected_date_str):
         if plant_data['assigned_plant_sensor_id']:
             sensor_data = conn.execute("""
                 SELECT s.temperature, s.humidity, s.light_lux, s.soil_moisture,
-                       s.soil_temperature1, s.soil_temperature2, d.battery_level, s.timestamp
+                       s.soil_temperature1, s.soil_temperature2,
+                       s.soil_temperature3, s.soil_temperature4,
+                       s.capacitance_ch1, s.capacitance_ch2,
+                       s.capacitance_ch3, s.capacitance_ch4,
+                       d.battery_level, s.timestamp
                 FROM sensor_data s JOIN devices d ON s.device_id = d.device_id
                 WHERE s.device_id = ? AND s.timestamp <= ?
                 ORDER BY s.timestamp DESC LIMIT 1
