@@ -6,6 +6,8 @@ from datetime import datetime
 from collections import deque
 import os
 import subprocess
+import signal
+import threading
 
 import config
 import device_manager as dm
@@ -367,6 +369,55 @@ async def process_commands(plant_connections):
     os.remove(processing_path)
 
 
+DEVICE_POLL_TIMEOUT = 60      # デバイスごとのBLE操作タイムアウト（秒）
+SWITCHBOT_POLL_TIMEOUT = 30   # SwitchBotアドバタイズスキャンのタイムアウト（秒）
+HARD_KILL_EXTRA = 30          # SIGALRM発動までの追加バッファ（秒）
+
+
+async def run_with_ble_timeout(coro, device_id, timeout):
+    """BLE操作に2段階タイムアウトを設定して実行する。
+
+    Stage 1 - スレッドタイマー（timeout秒後）:
+        別スレッドから loop.call_soon_threadsafe(task.cancel) を呼び出す。
+        call_soon_threadsafe はwakeup fdに書き込むため、epoll_waitを強制的に返し
+        asyncioがCancelledErrorをタスクに注入できるようにする。
+
+    Stage 2 - SIGALRM（timeout + HARD_KILL_EXTRA秒後）:
+        Stage 1のキャンセルが効かない場合（Bleakのクリーンアップがハングする等）、
+        SIGALRMがepoll_waitをINTRで中断し、プロセスを終了する。
+        systemdが自動的に再起動する。
+    """
+    loop = asyncio.get_running_loop()
+    task = asyncio.ensure_future(coro)
+
+    def _cancel_from_thread():
+        logger.warning(
+            f"[{device_id}] BLEタイムアウト({timeout}秒)。"
+            f"スレッドタイマーによりタスクをキャンセルします。"
+        )
+        loop.call_soon_threadsafe(task.cancel)
+
+    def _sigalrm_handler(signum, frame):
+        logger.error(
+            f"[{device_id}] BLEハードタイムアウト(SIGALRM {timeout + HARD_KILL_EXTRA}秒)。"
+            f"プロセスを終了します（systemdが再起動します）。"
+        )
+        raise SystemExit(1)
+
+    old_sigalrm = signal.signal(signal.SIGALRM, _sigalrm_handler)
+    signal.alarm(timeout + HARD_KILL_EXTRA)
+    timer = threading.Timer(timeout, _cancel_from_thread)
+    timer.start()
+    try:
+        return await task
+    except asyncio.CancelledError:
+        raise asyncio.TimeoutError(f"[{device_id}] BLE操作が{timeout}秒でタイムアウト")
+    finally:
+        timer.cancel()
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, old_sigalrm)
+
+
 async def main_loop():
     """Bluetoothデバイスのポーリングとコマンド処理を行うメインループ"""
     logger.info("Bluetoothデーモンループを開始します...")
@@ -443,13 +494,21 @@ async def main_loop():
                             plant_sensor_connections[dev_id] = PlantDeviceBLE(mac_address, dev_id)
                         ble_device = plant_sensor_connections[dev_id]
                         try:
-                            sensor_data = await ble_device.get_sensor_data()
+                            sensor_data = await run_with_ble_timeout(
+                                ble_device.get_sensor_data(),
+                                dev_id,
+                                timeout=DEVICE_POLL_TIMEOUT
+                            )
                         finally:
                             # 接続を明示的に切断してBluetoothリソースを解放
                             await ble_device.disconnect()
 
                     elif device_type and device_type.startswith('switchbot_'):
-                        sensor_data = await get_switchbot_adv_data(mac_address)
+                        sensor_data = await run_with_ble_timeout(
+                            get_switchbot_adv_data(mac_address),
+                            dev_id,
+                            timeout=SWITCHBOT_POLL_TIMEOUT
+                        )
 
                     # 取得結果をpipeファイルに書き出す
                     # センサーデータに含まれるdata_versionを優先し、なければDB値を使用
