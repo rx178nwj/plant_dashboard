@@ -627,6 +627,55 @@ async def update_device_firmware_ble(mac_address, firmware_file):
     return True
 
 
+async def read_last_log_from_ble(mac_address):
+    """
+    BLE経由でデバイスから直前の計測テキストログを取得する非同期関数
+    CMD_GET_LAST_LOG (0x1B) を使用
+    """
+    import struct
+
+    SERVICE_UUID = "592F4612-9543-9999-12C8-58B459A2712D"
+    COMMAND_UUID = "6A3B2C1D-4E5F-6A7B-8C9D-E0F123456791"
+    RESPONSE_UUID = "6A3B2C1D-4E5F-6A7B-8C9D-E0F123456792"
+
+    CMD_GET_LAST_LOG = 0x1B
+
+    response_data = {}
+
+    def notification_handler(sender, data):
+        if len(data) >= 5:
+            resp_id = data[0]
+            response_data[resp_id] = data
+
+    logger.info(f"Connecting to {mac_address} to fetch last log...")
+
+    async with BleakClient(mac_address) as client:
+        await client.start_notify(RESPONSE_UUID, notification_handler)
+        try:
+            packet = struct.pack("<BBH", CMD_GET_LAST_LOG, 0, 0)
+            await client.write_gatt_char(COMMAND_UUID, packet, response=False)
+
+            for _ in range(50):  # 5秒タイムアウト
+                if CMD_GET_LAST_LOG in response_data:
+                    break
+                await asyncio.sleep(0.1)
+
+            if CMD_GET_LAST_LOG not in response_data:
+                raise Exception("Response timeout for CMD_GET_LAST_LOG (0x1B)")
+
+            raw = response_data[CMD_GET_LAST_LOG]
+            status = raw[1]
+            data_len = struct.unpack("<H", raw[3:5])[0]
+            payload = raw[5:5 + data_len]
+
+            if status != 0x00:
+                raise Exception(f"Device returned error status: 0x{status:02X} (buffer may be empty)")
+
+            return payload.decode('utf-8', errors='replace')
+        finally:
+            await client.stop_notify(RESPONSE_UUID)
+
+
 async def reboot_device_ble(mac_address):
     """
     BLE経由でデバイスを再起動する非同期関数 (Mock)
@@ -655,6 +704,25 @@ def api_fetch_device_settings(device_id):
         return jsonify({'success': True, 'data': settings})
     except Exception as e:
         logger.error(f"Failed to fetch settings from device: {e}", exc_info=True)
+        return jsonify({'success': False, 'message': f"Communication error: {str(e)}"}), 500
+
+
+@devices_bp.route('/api/device/<device_id>/last-log')
+@requires_auth
+def api_get_last_log(device_id):
+    """デバイスから直前の計測テキストログを取得するAPI (CMD_GET_LAST_LOG 0x1B)"""
+    conn = dm.get_db_connection()
+    device = conn.execute('SELECT * FROM devices WHERE device_id = ?', (device_id,)).fetchone()
+    conn.close()
+
+    if not device:
+        return jsonify({'success': False, 'message': 'Device not found'}), 404
+
+    try:
+        log_text = asyncio.run(read_last_log_from_ble(device['mac_address']))
+        return jsonify({'success': True, 'log': log_text})
+    except Exception as e:
+        logger.error(f"Failed to fetch last log from device: {e}", exc_info=True)
         return jsonify({'success': False, 'message': f"Communication error: {str(e)}"}), 500
 
 

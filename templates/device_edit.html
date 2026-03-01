@@ -365,6 +365,23 @@
             </div>
         </div>
 
+        <!-- Last Log -->
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0">Last Measurement Log</h5>
+                    <button type="button" class="btn btn-outline-primary btn-sm" id="btn-fetch-last-log" data-device-id="{{ device.device_id }}">
+                        <i class="bi bi-terminal"></i> Fetch Log
+                    </button>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted small mb-2">直前の60秒計測サイクルのログをデバイスから取得します。</p>
+                    <div id="last-log-status" class="small text-muted mb-2"></div>
+                    <pre id="last-log-output" class="bg-dark text-success rounded p-3 small" style="min-height:120px; white-space:pre-wrap; display:none;"></pre>
+                </div>
+            </div>
+        </div>
+
         <!-- Firmware Update -->
         <div class="col-md-6">
             <div class="card h-100">
@@ -393,7 +410,36 @@ document.addEventListener('DOMContentLoaded', function() {
     const saveBtn = document.getElementById('save-settings-btn');
     const fetchTimeDataBtn = document.getElementById('btn-fetch-time-data');
     const updateFwBtn = document.getElementById('btn-update-firmware');
+    const fetchLastLogBtn = document.getElementById('btn-fetch-last-log');
     const deviceId = refreshBtn.dataset.deviceId;
+
+    // Last Measurement Log
+    if (fetchLastLogBtn) {
+        fetchLastLogBtn.addEventListener('click', async function() {
+            const statusEl = document.getElementById('last-log-status');
+            const outputEl = document.getElementById('last-log-output');
+            fetchLastLogBtn.disabled = true;
+            fetchLastLogBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 取得中...';
+            statusEl.textContent = 'デバイスに接続中...';
+            outputEl.style.display = 'none';
+            try {
+                const resp = await fetch(`/api/device/${deviceId}/last-log`);
+                const result = await resp.json();
+                if (result.success) {
+                    outputEl.textContent = result.log;
+                    outputEl.style.display = 'block';
+                    statusEl.textContent = '取得完了';
+                } else {
+                    statusEl.textContent = `エラー: ${result.message}`;
+                }
+            } catch (e) {
+                statusEl.textContent = `通信エラー: ${e.message}`;
+            } finally {
+                fetchLastLogBtn.disabled = false;
+                fetchLastLogBtn.innerHTML = '<i class="bi bi-terminal"></i> Fetch Log';
+            }
+        });
+    }
 
     refreshBtn.addEventListener('click', async function() {
         refreshBtn.disabled = true;
