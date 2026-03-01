@@ -135,6 +135,35 @@ def migrate_db_schema(cursor):
         except sqlite3.OperationalError as e:
             logger.error(f"Failed to add column 'data_version' to 'devices' table: {e}")
 
+    # --- Create / migrate plant_observations table ---
+    cursor.execute("PRAGMA table_info(plant_observations)")
+    obs_cols = [row['name'] for row in cursor.fetchall()]
+    # Drop and recreate if old schema detected (no data yet)
+    if obs_cols and ('health_status' in obs_cols or 'growth_activity' in obs_cols):
+        cursor.execute("DROP TABLE plant_observations")
+        obs_cols = []
+    if not obs_cols:
+        cursor.execute("""
+            CREATE TABLE plant_observations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                managed_plant_id TEXT NOT NULL,
+                observed_at TEXT NOT NULL,
+                event_new_bud INTEGER DEFAULT 0,
+                event_leaves_dropped INTEGER DEFAULT 0,
+                event_flower_stem INTEGER DEFAULT 0,
+                event_flowering INTEGER DEFAULT 0,
+                event_offset_pup INTEGER DEFAULT 0,
+                watered INTEGER DEFAULT 0,
+                fertilized INTEGER DEFAULT 0,
+                repotted INTEGER DEFAULT 0,
+                pruned INTEGER DEFAULT 0,
+                pest_detected TEXT,
+                notes TEXT,
+                created_at TEXT DEFAULT (datetime('now','localtime')),
+                FOREIGN KEY (managed_plant_id) REFERENCES managed_plants(managed_plant_id)
+            )
+        """)
+
 
 def init_db():
     conn = get_db_connection()
@@ -237,6 +266,27 @@ def init_db():
         watering_advice TEXT,
         analysis_log TEXT,
         UNIQUE(managed_plant_id, analysis_date),
+        FOREIGN KEY (managed_plant_id) REFERENCES managed_plants(managed_plant_id)
+    );
+    """)
+
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS plant_observations (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        managed_plant_id TEXT NOT NULL,
+        observed_at TEXT NOT NULL,
+        event_new_bud INTEGER DEFAULT 0,
+        event_leaves_dropped INTEGER DEFAULT 0,
+        event_flower_stem INTEGER DEFAULT 0,
+        event_flowering INTEGER DEFAULT 0,
+        event_offset_pup INTEGER DEFAULT 0,
+        watered INTEGER DEFAULT 0,
+        fertilized INTEGER DEFAULT 0,
+        repotted INTEGER DEFAULT 0,
+        pruned INTEGER DEFAULT 0,
+        pest_detected TEXT,
+        notes TEXT,
+        created_at TEXT DEFAULT (datetime('now','localtime')),
         FOREIGN KEY (managed_plant_id) REFERENCES managed_plants(managed_plant_id)
     );
     """)

@@ -373,6 +373,10 @@ function initializeDetailCharts() {
     if (isPlantDetailPage) {
         const climateChartCanvas = document.getElementById('monthly-climate-chart');
         renderMonthlyClimateChart(climateChartCanvas);
+
+        // --- Observation Log ---
+        const managedPlantIdForObs = pageContainer.dataset.plantId;
+        initObservationLog(managedPlantIdForObs);
     }
 }
 
@@ -845,4 +849,217 @@ async function updateSensorHistoryChart(deviceId, period, chartInstances, select
         loader.classList.add('d-none');
         canvas.style.visibility = 'visible';
     }
+}
+
+// =============================================================================
+// Observation Log
+// =============================================================================
+
+function initObservationLog(managedPlantId) {
+    const tabPane = document.getElementById(`observation-log-${managedPlantId}`);
+    if (!tabPane) return;
+
+    const parseBtn = tabPane.querySelector('.obs-parse-btn');
+    const saveBtn = tabPane.querySelector('.obs-save-btn');
+    const resetBtn = tabPane.querySelector('.obs-reset-btn');
+    const refreshBtn = tabPane.querySelector('.obs-refresh-btn');
+    const tabButton = document.getElementById('observation-log-tab');
+
+    // Load history when tab is first shown
+    let historyLoaded = false;
+    if (tabButton) {
+        tabButton.addEventListener('shown.bs.tab', () => {
+            if (!historyLoaded) {
+                loadObservationHistory(managedPlantId);
+                historyLoaded = true;
+            }
+        });
+    }
+
+    if (parseBtn) {
+        parseBtn.addEventListener('click', async () => {
+            const text = tabPane.querySelector('.obs-free-text').value.trim();
+            if (!text) return;
+            const statusEl = tabPane.querySelector('.obs-parse-status');
+            parseBtn.disabled = true;
+            statusEl.textContent = 'AI解析中...';
+            try {
+                const resp = await fetch(`/api/plants/${managedPlantId}/observation/parse`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text })
+                });
+                const data = await resp.json();
+                if (data.success) {
+                    applyParsedData(managedPlantId, data.parsed);
+                    statusEl.textContent = '解析完了';
+                    statusEl.className = 'obs-parse-status text-success small align-self-center';
+                } else {
+                    statusEl.textContent = data.message || '解析失敗';
+                    statusEl.className = 'obs-parse-status text-danger small align-self-center';
+                }
+            } catch (e) {
+                statusEl.textContent = 'エラーが発生しました';
+                statusEl.className = 'obs-parse-status text-danger small align-self-center';
+            } finally {
+                parseBtn.disabled = false;
+            }
+        });
+    }
+
+    if (saveBtn) {
+        saveBtn.addEventListener('click', async () => {
+            const statusEl = tabPane.querySelector('.obs-save-status');
+            const payload = {
+                observed_at: tabPane.querySelector('.obs-observed-at').value,
+                event_new_bud: tabPane.querySelector('.obs-event-new-bud').checked,
+                event_leaves_dropped: tabPane.querySelector('.obs-event-leaves-dropped').checked,
+                event_flower_stem: tabPane.querySelector('.obs-event-flower-stem').checked,
+                event_flowering: tabPane.querySelector('.obs-event-flowering').checked,
+                event_offset_pup: tabPane.querySelector('.obs-event-offset-pup').checked,
+                watered: tabPane.querySelector('.obs-watered').checked,
+                fertilized: tabPane.querySelector('.obs-fertilized').checked,
+                repotted: tabPane.querySelector('.obs-repotted').checked,
+                pruned: tabPane.querySelector('.obs-pruned').checked,
+                pest_detected: tabPane.querySelector('.obs-pest-detected').value.trim() || null,
+                notes: tabPane.querySelector('.obs-free-text').value.trim() || null
+            };
+
+            // 何も記録されていない場合は保存しない
+            const hasAnyInput = payload.event_new_bud || payload.event_leaves_dropped ||
+                payload.event_flower_stem || payload.event_flowering || payload.event_offset_pup ||
+                payload.watered || payload.fertilized || payload.repotted || payload.pruned ||
+                payload.pest_detected || payload.notes;
+            if (!hasAnyInput) {
+                statusEl.textContent = '少なくとも1つの項目を入力またはチェックしてください';
+                statusEl.className = 'obs-save-status text-warning small align-self-center';
+                return;
+            }
+
+            saveBtn.disabled = true;
+            statusEl.textContent = '保存中...';
+            try {
+                const resp = await fetch(`/api/plants/${managedPlantId}/observation`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await resp.json();
+                if (data.success) {
+                    statusEl.textContent = '保存しました';
+                    statusEl.className = 'obs-save-status text-success small align-self-center';
+                    resetObservationForm(managedPlantId);
+                    loadObservationHistory(managedPlantId);
+                    historyLoaded = true;
+                } else {
+                    statusEl.textContent = data.message || '保存失敗';
+                    statusEl.className = 'obs-save-status text-danger small align-self-center';
+                }
+            } catch (e) {
+                statusEl.textContent = 'エラーが発生しました';
+                statusEl.className = 'obs-save-status text-danger small align-self-center';
+            } finally {
+                saveBtn.disabled = false;
+            }
+        });
+    }
+
+    if (resetBtn) {
+        resetBtn.addEventListener('click', () => resetObservationForm(managedPlantId));
+    }
+
+    if (refreshBtn) {
+        refreshBtn.addEventListener('click', () => loadObservationHistory(managedPlantId));
+    }
+}
+
+function applyParsedData(managedPlantId, parsed) {
+    const tabPane = document.getElementById(`observation-log-${managedPlantId}`);
+    if (!tabPane || !parsed) return;
+
+    const setSelect = (selector, value) => {
+        const el = tabPane.querySelector(selector);
+        if (el && value != null) el.value = value;
+    };
+    const setCheckbox = (selector, value) => {
+        const el = tabPane.querySelector(selector);
+        if (el) el.checked = !!value;
+    };
+
+    setCheckbox('.obs-event-new-bud', parsed.event_new_bud);
+    setCheckbox('.obs-event-leaves-dropped', parsed.event_leaves_dropped);
+    setCheckbox('.obs-event-flower-stem', parsed.event_flower_stem);
+    setCheckbox('.obs-event-flowering', parsed.event_flowering);
+    setCheckbox('.obs-event-offset-pup', parsed.event_offset_pup);
+    setCheckbox('.obs-watered', parsed.watered);
+    setCheckbox('.obs-fertilized', parsed.fertilized);
+    setCheckbox('.obs-repotted', parsed.repotted);
+    setCheckbox('.obs-pruned', parsed.pruned);
+
+    const pestEl = tabPane.querySelector('.obs-pest-detected');
+    if (pestEl) pestEl.value = parsed.pest_detected || '';
+}
+
+async function loadObservationHistory(managedPlantId) {
+    const tabPane = document.getElementById(`observation-log-${managedPlantId}`);
+    if (!tabPane) return;
+    const container = tabPane.querySelector('.obs-history-container');
+    if (!container) return;
+
+    container.innerHTML = '<div class="text-center py-3"><div class="spinner-border spinner-border-sm text-primary" role="status"></div></div>';
+    try {
+        const resp = await fetch(`/api/plants/${managedPlantId}/observations`);
+        const data = await resp.json();
+        if (!data.success) throw new Error(data.message);
+        if (data.observations.length === 0) {
+            container.innerHTML = '<div class="text-center text-muted py-3">観察記録がありません</div>';
+            return;
+        }
+        container.innerHTML = data.observations.map(obs => renderObservationCard(obs)).join('');
+    } catch (e) {
+        container.innerHTML = `<div class="text-center text-danger py-3">読み込みエラー: ${e.message}</div>`;
+    }
+}
+
+function renderObservationCard(obs) {
+    const events = [];
+    if (obs.event_new_bud)         events.push('<span class="badge bg-success">🌱 芽が出た</span>');
+    if (obs.event_leaves_dropped)  events.push('<span class="badge bg-secondary">🍂 葉が落ちた</span>');
+    if (obs.event_flower_stem)     events.push('<span class="badge" style="background-color:#198754;color:#fff">🌿 花の茎が出た</span>');
+    if (obs.event_flowering)       events.push('<span class="badge" style="background-color:#d63384;color:#fff">🌸 花が咲いた</span>');
+    if (obs.event_offset_pup)      events.push('<span class="badge bg-info text-dark">🪴 子株が出た</span>');
+
+    const actions = [];
+    if (obs.watered)    actions.push('<span class="badge bg-primary">💧 水やり</span>');
+    if (obs.fertilized) actions.push('<span class="badge bg-success">🌿 肥料</span>');
+    if (obs.repotted)   actions.push('<span class="badge bg-warning text-dark">🪴 植え替え</span>');
+    if (obs.pruned)     actions.push('<span class="badge bg-secondary">✂️ 剪定</span>');
+    if (obs.pest_detected) actions.push(`<span class="badge bg-danger">🐛 害虫: ${obs.pest_detected}</span>`);
+
+    return `
+    <div class="border rounded p-2 mb-2 bg-light">
+        <span class="fw-bold small text-muted">${obs.observed_at}</span>
+        ${events.length ? `<div class="d-flex flex-wrap gap-1 mt-1 mb-1">${events.join('')}</div>` : ''}
+        ${actions.length ? `<div class="d-flex flex-wrap gap-1 mb-1">${actions.join('')}</div>` : ''}
+        ${obs.notes ? `<div class="small text-secondary fst-italic mt-1">${obs.notes}</div>` : ''}
+    </div>`;
+}
+
+function resetObservationForm(managedPlantId) {
+    const tabPane = document.getElementById(`observation-log-${managedPlantId}`);
+    if (!tabPane) return;
+    tabPane.querySelector('.obs-free-text').value = '';
+    tabPane.querySelector('.obs-event-new-bud').checked = false;
+    tabPane.querySelector('.obs-event-leaves-dropped').checked = false;
+    tabPane.querySelector('.obs-event-flower-stem').checked = false;
+    tabPane.querySelector('.obs-event-flowering').checked = false;
+    tabPane.querySelector('.obs-event-offset-pup').checked = false;
+    tabPane.querySelector('.obs-watered').checked = false;
+    tabPane.querySelector('.obs-fertilized').checked = false;
+    tabPane.querySelector('.obs-repotted').checked = false;
+    tabPane.querySelector('.obs-pruned').checked = false;
+    tabPane.querySelector('.obs-pest-detected').value = '';
+    tabPane.querySelector('.obs-observed-at').value = new Date().toISOString().split('T')[0];
+    tabPane.querySelector('.obs-parse-status').textContent = '';
+    tabPane.querySelector('.obs-save-status').textContent = '';
 }

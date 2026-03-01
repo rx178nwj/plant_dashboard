@@ -1,9 +1,13 @@
-from flask import Blueprint, render_template, request, jsonify, Response, abort
+from flask import Blueprint, render_template, request, jsonify, Response, abort, current_app
 from datetime import date, timedelta
 import json
 import time
+import httpx
+import logging
 import device_manager as dm
 from functools import wraps
+
+logger = logging.getLogger(__name__)
 
 # Blueprintオブジェクトを作成
 dashboard_bp = Blueprint('dashboard', __name__, template_folder='../../templates', static_folder='../../static')
@@ -384,6 +388,136 @@ def api_plant_analysis_history(managed_plant_id):
     }
     
     return jsonify(response_data)
+
+
+@dashboard_bp.route('/api/plants/<managed_plant_id>/observation/parse', methods=['POST'])
+@requires_auth
+def api_observation_parse(managed_plant_id):
+    """自由テキストをClaude APIで解析して観察フィールドに変換する"""
+    data = request.json
+    text = (data.get('text') or '').strip()
+    if not text:
+        return jsonify({'success': False, 'message': 'テキストを入力してください。'}), 400
+
+    api_key = current_app.config.get('ANTHROPIC_API_KEY')
+    if not api_key:
+        return jsonify({'success': False, 'message': 'APIキーが設定されていません。'}), 500
+
+    prompt = f"""以下の植物観察メモを解析し、JSON形式のみで返してください。説明や補足は不要です。
+
+フィールド定義（すべて true/false または文字列）:
+- event_new_bud: 芽が出た・新しい成長点が見えた (true/false)
+- event_leaves_dropped: 葉が落ちた・葉が枯れ落ちた (true/false)
+- event_flower_stem: 花の茎・花芽の茎が出てきた (true/false)
+- event_flowering: 花が咲いた・開花した (true/false)
+- event_offset_pup: 子株・脇芽・ランナーが出た (true/false)
+- watered: 水やりをした (true/false)
+- fertilized: 肥料を与えた (true/false)
+- repotted: 植え替えをした (true/false)
+- pruned: 剪定・トリミングをした (true/false)
+- pest_detected: 検出した害虫名（日本語）、いなければ null
+
+観察メモ: {text}
+
+JSONのみ返してください:"""
+
+    try:
+        api_url = "https://api.anthropic.com/v1/messages"
+        headers = {
+            "x-api-key": api_key,
+            "anthropic-version": "2023-06-01",
+            "content-type": "application/json"
+        }
+        payload = {
+            "model": "claude-sonnet-4-6",
+            "max_tokens": 512,
+            "temperature": 0.1,
+            "messages": [{"role": "user", "content": prompt}]
+        }
+        with httpx.Client(timeout=30.0) as client:
+            response = client.post(api_url, headers=headers, json=payload)
+            response.raise_for_status()
+            result = response.json()
+
+        content = result['content'][0]['text'].strip()
+        # コードブロック除去
+        if content.startswith("```json"):
+            content = content[7:]
+        elif content.startswith("```"):
+            content = content[3:]
+        if content.endswith("```"):
+            content = content[:-3]
+        content = content.strip()
+
+        parsed = json.loads(content)
+        return jsonify({'success': True, 'parsed': parsed})
+
+    except Exception as e:
+        logger.error(f"Observation parse error: {e}")
+        return jsonify({'success': False, 'message': f'AI解析中にエラーが発生しました: {str(e)}'}), 500
+
+
+@dashboard_bp.route('/api/plants/<managed_plant_id>/observation', methods=['POST'])
+@requires_auth
+def api_observation_save(managed_plant_id):
+    """観察記録をDBに保存する"""
+    data = request.json or {}
+    observed_at = data.get('observed_at') or date.today().isoformat()
+
+    conn = dm.get_db_connection()
+    try:
+        cursor = conn.execute("""
+            INSERT INTO plant_observations
+                (managed_plant_id, observed_at,
+                 event_new_bud, event_leaves_dropped, event_flower_stem,
+                 event_flowering, event_offset_pup,
+                 watered, fertilized, repotted, pruned,
+                 pest_detected, notes)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            managed_plant_id,
+            observed_at,
+            1 if data.get('event_new_bud') else 0,
+            1 if data.get('event_leaves_dropped') else 0,
+            1 if data.get('event_flower_stem') else 0,
+            1 if data.get('event_flowering') else 0,
+            1 if data.get('event_offset_pup') else 0,
+            1 if data.get('watered') else 0,
+            1 if data.get('fertilized') else 0,
+            1 if data.get('repotted') else 0,
+            1 if data.get('pruned') else 0,
+            data.get('pest_detected') or None,
+            data.get('notes') or None
+        ))
+        conn.commit()
+        new_id = cursor.lastrowid
+        return jsonify({'success': True, 'id': new_id})
+    except Exception as e:
+        logger.error(f"Observation save error: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+    finally:
+        conn.close()
+
+
+@dashboard_bp.route('/api/plants/<managed_plant_id>/observations', methods=['GET'])
+@requires_auth
+def api_observations_list(managed_plant_id):
+    """観察履歴一覧を返す"""
+    limit = request.args.get('limit', 20, type=int)
+    conn = dm.get_db_connection()
+    rows = conn.execute("""
+        SELECT id, observed_at,
+               event_new_bud, event_leaves_dropped, event_flower_stem,
+               event_flowering, event_offset_pup,
+               watered, fertilized, repotted, pruned,
+               pest_detected, notes, created_at
+        FROM plant_observations
+        WHERE managed_plant_id = ?
+        ORDER BY observed_at DESC, created_at DESC
+        LIMIT ?
+    """, (managed_plant_id, limit)).fetchall()
+    conn.close()
+    return jsonify({'success': True, 'observations': [dict(r) for r in rows]})
 
 
 @dashboard_bp.route('/stream')

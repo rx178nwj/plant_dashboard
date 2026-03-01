@@ -190,6 +190,9 @@
                 <li class="nav-item" role="presentation">
                     <button class="nav-link" id="analysis-log-tab" data-bs-toggle="tab" data-bs-target="#analysis-log" type="button" role="tab" aria-controls="analysis-log" aria-selected="false">Analysis Log</button>
                 </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="observation-log-tab" data-bs-toggle="tab" data-bs-target="#observation-log-{{ plant.managed_plant_id }}" type="button" role="tab" aria-controls="observation-log-{{ plant.managed_plant_id }}" aria-selected="false">Observation Log</button>
+                </li>
             </ul>
             <div class="tab-content" id="historyTabContent">
                 <!-- Analysis Log Tab -->
@@ -354,6 +357,110 @@
                         </div>
                     </div>
                     {% endif %}
+                </div>
+                <!-- Observation Log Tab -->
+                <div class="tab-pane fade" id="observation-log-{{ plant.managed_plant_id }}" role="tabpanel" aria-labelledby="observation-log-tab"
+                     data-managed-plant-id="{{ plant.managed_plant_id }}">
+                    <!-- New Observation Input -->
+                    <div class="card shadow-sm mb-3">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0"><i class="bi bi-pencil-square"></i> 観察記録を追加</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-2">
+                                <label class="form-label small text-muted">観察日</label>
+                                <input type="date" class="form-control form-control-sm obs-observed-at" style="width:auto;" value="{{ today_date }}">
+                            </div>
+                            <!-- Free text input + AI parse -->
+                            <div class="mb-3">
+                                <label class="form-label fw-bold">観察メモ <span class="text-muted fw-normal small">（自由入力 → AIがチェックボックスを自動判定）</span></label>
+                                <textarea class="form-control obs-free-text" rows="2" placeholder="例: 新しい芽が出てきた。今日水やりした。花の茎が出てきた。"></textarea>
+                                <div class="d-flex gap-2 mt-2">
+                                    <button type="button" class="btn btn-outline-primary btn-sm obs-parse-btn">
+                                        <i class="bi bi-robot"></i> AI解析
+                                    </button>
+                                    <span class="obs-parse-status text-muted small align-self-center"></span>
+                                </div>
+                            </div>
+                            <hr class="my-2">
+                            <!-- Activity events -->
+                            <div class="mb-3">
+                                <label class="form-label small fw-bold"><i class="bi bi-activity text-success"></i> 活性イベント</label>
+                                <div class="d-flex flex-wrap gap-3">
+                                    <div class="form-check">
+                                        <input class="form-check-input obs-event-new-bud" type="checkbox" id="obs-new-bud-{{ plant.managed_plant_id }}">
+                                        <label class="form-check-label" for="obs-new-bud-{{ plant.managed_plant_id }}">🌱 芽が出た</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input obs-event-leaves-dropped" type="checkbox" id="obs-leaves-dropped-{{ plant.managed_plant_id }}">
+                                        <label class="form-check-label" for="obs-leaves-dropped-{{ plant.managed_plant_id }}">🍂 葉が落ちた</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input obs-event-flower-stem" type="checkbox" id="obs-flower-stem-{{ plant.managed_plant_id }}">
+                                        <label class="form-check-label" for="obs-flower-stem-{{ plant.managed_plant_id }}">🌿 花の茎が出た</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input obs-event-flowering" type="checkbox" id="obs-flowering-{{ plant.managed_plant_id }}">
+                                        <label class="form-check-label" for="obs-flowering-{{ plant.managed_plant_id }}">🌸 花が咲いた</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input obs-event-offset-pup" type="checkbox" id="obs-offset-pup-{{ plant.managed_plant_id }}">
+                                        <label class="form-check-label" for="obs-offset-pup-{{ plant.managed_plant_id }}">🪴 子株が出た</label>
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- Care actions -->
+                            <div class="mb-3">
+                                <label class="form-label small fw-bold"><i class="bi bi-tools text-secondary"></i> 実施した作業</label>
+                                <div class="d-flex flex-wrap gap-3">
+                                    <div class="form-check">
+                                        <input class="form-check-input obs-watered" type="checkbox" id="obs-watered-{{ plant.managed_plant_id }}">
+                                        <label class="form-check-label" for="obs-watered-{{ plant.managed_plant_id }}">💧 水やり</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input obs-fertilized" type="checkbox" id="obs-fertilized-{{ plant.managed_plant_id }}">
+                                        <label class="form-check-label" for="obs-fertilized-{{ plant.managed_plant_id }}">🌿 肥料</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input obs-repotted" type="checkbox" id="obs-repotted-{{ plant.managed_plant_id }}">
+                                        <label class="form-check-label" for="obs-repotted-{{ plant.managed_plant_id }}">🪴 植え替え</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input obs-pruned" type="checkbox" id="obs-pruned-{{ plant.managed_plant_id }}">
+                                        <label class="form-check-label" for="obs-pruned-{{ plant.managed_plant_id }}">✂️ 剪定</label>
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- Pest -->
+                            <div class="mb-2">
+                                <label class="form-label small"><i class="bi bi-bug text-danger"></i> 害虫名（確認した場合のみ）</label>
+                                <input type="text" class="form-control form-control-sm obs-pest-detected" style="max-width:250px;" placeholder="例: アブラムシ、カイガラムシ">
+                            </div>
+                            <div class="mt-3 d-flex gap-2">
+                                <button type="button" class="btn btn-primary btn-sm obs-save-btn">
+                                    <i class="bi bi-save"></i> 保存
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm obs-reset-btn">
+                                    <i class="bi bi-x-circle"></i> リセット
+                                </button>
+                                <span class="obs-save-status text-muted small align-self-center"></span>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Observation History -->
+                    <div class="card shadow-sm">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0"><i class="bi bi-clock-history"></i> 観察履歴</h5>
+                            <button type="button" class="btn btn-outline-secondary btn-sm obs-refresh-btn">
+                                <i class="bi bi-arrow-clockwise"></i>
+                            </button>
+                        </div>
+                        <div class="card-body p-2">
+                            <div class="obs-history-container" style="max-height: 60vh; overflow-y: auto;">
+                                <div class="text-center text-muted py-3 obs-history-empty">タブを開くと履歴を読み込みます</div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
