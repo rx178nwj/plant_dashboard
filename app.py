@@ -49,6 +49,7 @@ def create_app():
     def inject_nav():
         return dict(nav_items=[
             {'url': 'dashboard.dashboard', 'icon': 'bi-grid-fill', 'text': 'Dashboard'},
+            {'url': 'dashboard.observations_page', 'icon': 'bi-journal-text', 'text': 'Observations'},
             {'url': 'devices.devices_profiles', 'icon': 'bi-sliders', 'text': 'Device Profiles'},
             {'url': 'management.management', 'icon': 'bi-sliders', 'text': 'Management'},
             {'url': 'management.watering_profiles', 'icon': 'bi-droplet-half', 'text': 'Watering Profiles'},

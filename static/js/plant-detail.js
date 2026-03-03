@@ -865,12 +865,93 @@ function initObservationLog(managedPlantId) {
     const refreshBtn = tabPane.querySelector('.obs-refresh-btn');
     const tabButton = document.getElementById('observation-log-tab');
 
+    // --- 写真管理 ---
+    const imageFiles = [];
+    const imageInput = tabPane.querySelector('.obs-image-input');
+    const imagePreview = tabPane.querySelector('.obs-image-preview');
+    const imageCount = tabPane.querySelector('.obs-image-count');
+
+    function updateImagePreview() {
+        if (!imagePreview) return;
+        imagePreview.innerHTML = '';
+        imageFiles.forEach((file, idx) => {
+            const url = URL.createObjectURL(file);
+            const wrapper = document.createElement('div');
+            wrapper.style.cssText = 'position:relative;display:inline-block;';
+            wrapper.innerHTML = `
+                <img src="${url}" style="height:64px;width:64px;object-fit:cover;border-radius:6px;border:1px solid #ccc;">
+                <button type="button" class="btn-close" style="position:absolute;top:-6px;right:-6px;background-color:#fff;border-radius:50%;padding:2px;font-size:0.6rem;" aria-label="削除"></button>`;
+            wrapper.querySelector('.btn-close').addEventListener('click', () => {
+                URL.revokeObjectURL(url);
+                imageFiles.splice(idx, 1);
+                updateImagePreview();
+            });
+            imagePreview.appendChild(wrapper);
+        });
+        if (imageCount) imageCount.textContent = `${imageFiles.length} / 3`;
+    }
+
+    function clearImages() {
+        imageFiles.length = 0;
+        updateImagePreview();
+    }
+
+    if (imageInput) {
+        imageInput.addEventListener('change', (e) => {
+            for (const file of e.target.files) {
+                if (imageFiles.length >= 3) break;
+                imageFiles.push(file);
+            }
+            updateImagePreview();
+            imageInput.value = '';  // 同一ファイル再選択を可能にする
+        });
+    }
+
+    // --- 月ナビゲーション ---
+    const now = new Date();
+    let navYear  = now.getFullYear();
+    let navMonth = now.getMonth() + 1;  // 1-12
+
+    const monthLabel   = tabPane.querySelector('.obs-month-label');
+    const prevMonthBtn = tabPane.querySelector('.obs-prev-month-btn');
+    const nextMonthBtn = tabPane.querySelector('.obs-next-month-btn');
+
+    function updateMonthLabel() {
+        if (monthLabel) monthLabel.textContent = `${navYear}年${navMonth}月`;
+        if (nextMonthBtn) {
+            const n = new Date();
+            nextMonthBtn.disabled = (navYear === n.getFullYear() && navMonth === n.getMonth() + 1);
+        }
+    }
+
+    function reloadCurrentMonth() {
+        loadObservationHistory(managedPlantId, navYear, navMonth);
+    }
+
+    if (prevMonthBtn) {
+        prevMonthBtn.addEventListener('click', () => {
+            navMonth--;
+            if (navMonth < 1) { navMonth = 12; navYear--; }
+            updateMonthLabel();
+            reloadCurrentMonth();
+        });
+    }
+    if (nextMonthBtn) {
+        nextMonthBtn.addEventListener('click', () => {
+            navMonth++;
+            if (navMonth > 12) { navMonth = 1; navYear++; }
+            updateMonthLabel();
+            reloadCurrentMonth();
+        });
+    }
+    updateMonthLabel();
+
     // Load history when tab is first shown
     let historyLoaded = false;
     if (tabButton) {
         tabButton.addEventListener('shown.bs.tab', () => {
             if (!historyLoaded) {
-                loadObservationHistory(managedPlantId);
+                reloadCurrentMonth();
                 historyLoaded = true;
             }
         });
@@ -910,46 +991,53 @@ function initObservationLog(managedPlantId) {
     if (saveBtn) {
         saveBtn.addEventListener('click', async () => {
             const statusEl = tabPane.querySelector('.obs-save-status');
-            const payload = {
-                observed_at: tabPane.querySelector('.obs-observed-at').value,
-                event_new_bud: tabPane.querySelector('.obs-event-new-bud').checked,
-                event_leaves_dropped: tabPane.querySelector('.obs-event-leaves-dropped').checked,
-                event_flower_stem: tabPane.querySelector('.obs-event-flower-stem').checked,
-                event_flowering: tabPane.querySelector('.obs-event-flowering').checked,
-                event_offset_pup: tabPane.querySelector('.obs-event-offset-pup').checked,
-                watered: tabPane.querySelector('.obs-watered').checked,
-                fertilized: tabPane.querySelector('.obs-fertilized').checked,
-                repotted: tabPane.querySelector('.obs-repotted').checked,
-                pruned: tabPane.querySelector('.obs-pruned').checked,
-                pest_detected: tabPane.querySelector('.obs-pest-detected').value.trim() || null,
-                notes: tabPane.querySelector('.obs-free-text').value.trim() || null
-            };
+            const boolField = (sel) => tabPane.querySelector(sel).checked ? '1' : '';
+            const textField = (sel) => tabPane.querySelector(sel).value.trim();
 
             // 何も記録されていない場合は保存しない
-            const hasAnyInput = payload.event_new_bud || payload.event_leaves_dropped ||
-                payload.event_flower_stem || payload.event_flowering || payload.event_offset_pup ||
-                payload.watered || payload.fertilized || payload.repotted || payload.pruned ||
-                payload.pest_detected || payload.notes;
+            const hasAnyInput = [
+                '.obs-event-new-bud', '.obs-event-leaves-dropped', '.obs-event-flower-stem',
+                '.obs-event-flowering', '.obs-event-offset-pup',
+                '.obs-watered', '.obs-fertilized', '.obs-repotted', '.obs-pruned'
+            ].some(sel => tabPane.querySelector(sel).checked) ||
+                textField('.obs-pest-detected') || textField('.obs-free-text') || imageFiles.length > 0;
+
             if (!hasAnyInput) {
                 statusEl.textContent = '少なくとも1つの項目を入力またはチェックしてください';
                 statusEl.className = 'obs-save-status text-warning small align-self-center';
                 return;
             }
 
+            // FormData で送信（写真ファイルを含む）
+            const fd = new FormData();
+            fd.append('observed_at', textField('.obs-observed-at'));
+            fd.append('event_new_bud',        boolField('.obs-event-new-bud'));
+            fd.append('event_leaves_dropped',  boolField('.obs-event-leaves-dropped'));
+            fd.append('event_flower_stem',     boolField('.obs-event-flower-stem'));
+            fd.append('event_flowering',       boolField('.obs-event-flowering'));
+            fd.append('event_offset_pup',      boolField('.obs-event-offset-pup'));
+            fd.append('watered',    boolField('.obs-watered'));
+            fd.append('fertilized', boolField('.obs-fertilized'));
+            fd.append('repotted',   boolField('.obs-repotted'));
+            fd.append('pruned',     boolField('.obs-pruned'));
+            fd.append('pest_detected', textField('.obs-pest-detected'));
+            fd.append('notes',         textField('.obs-free-text'));
+            imageFiles.forEach(f => fd.append('obs-image-upload', f));
+
             saveBtn.disabled = true;
             statusEl.textContent = '保存中...';
             try {
                 const resp = await fetch(`/api/plants/${managedPlantId}/observation`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
+                    body: fd
                 });
                 const data = await resp.json();
                 if (data.success) {
                     statusEl.textContent = '保存しました';
                     statusEl.className = 'obs-save-status text-success small align-self-center';
                     resetObservationForm(managedPlantId);
-                    loadObservationHistory(managedPlantId);
+                    clearImages();
+                    reloadCurrentMonth();
                     historyLoaded = true;
                 } else {
                     statusEl.textContent = data.message || '保存失敗';
@@ -965,11 +1053,14 @@ function initObservationLog(managedPlantId) {
     }
 
     if (resetBtn) {
-        resetBtn.addEventListener('click', () => resetObservationForm(managedPlantId));
+        resetBtn.addEventListener('click', () => {
+            resetObservationForm(managedPlantId);
+            clearImages();
+        });
     }
 
     if (refreshBtn) {
-        refreshBtn.addEventListener('click', () => loadObservationHistory(managedPlantId));
+        refreshBtn.addEventListener('click', () => reloadCurrentMonth());
     }
 }
 
@@ -1000,7 +1091,7 @@ function applyParsedData(managedPlantId, parsed) {
     if (pestEl) pestEl.value = parsed.pest_detected || '';
 }
 
-async function loadObservationHistory(managedPlantId) {
+async function loadObservationHistory(managedPlantId, year, month) {
     const tabPane = document.getElementById(`observation-log-${managedPlantId}`);
     if (!tabPane) return;
     const container = tabPane.querySelector('.obs-history-container');
@@ -1008,11 +1099,14 @@ async function loadObservationHistory(managedPlantId) {
 
     container.innerHTML = '<div class="text-center py-3"><div class="spinner-border spinner-border-sm text-primary" role="status"></div></div>';
     try {
-        const resp = await fetch(`/api/plants/${managedPlantId}/observations`);
+        const params = new URLSearchParams();
+        if (year)  params.set('year',  year);
+        if (month) params.set('month', month);
+        const resp = await fetch(`/api/plants/${managedPlantId}/observations?${params}`);
         const data = await resp.json();
         if (!data.success) throw new Error(data.message);
         if (data.observations.length === 0) {
-            container.innerHTML = '<div class="text-center text-muted py-3">観察記録がありません</div>';
+            container.innerHTML = '<div class="text-center text-muted py-3">この月の観察記録はありません</div>';
             return;
         }
         container.innerHTML = data.observations.map(obs => renderObservationCard(obs)).join('');
@@ -1036,12 +1130,21 @@ function renderObservationCard(obs) {
     if (obs.pruned)     actions.push('<span class="badge bg-secondary">✂️ 剪定</span>');
     if (obs.pest_detected) actions.push(`<span class="badge bg-danger">🐛 害虫: ${obs.pest_detected}</span>`);
 
+    const images = obs.observation_images || [];
+    const imagesHtml = images.length > 0
+        ? `<div class="d-flex gap-1 mt-2 flex-wrap">${images.map(url =>
+            `<a href="${url}" target="_blank" rel="noopener">
+               <img src="${url}" style="height:64px;width:64px;object-fit:cover;border-radius:6px;border:1px solid #ccc;">
+             </a>`).join('')}</div>`
+        : '';
+
     return `
     <div class="border rounded p-2 mb-2 bg-light">
         <span class="fw-bold small text-muted">${obs.observed_at}</span>
         ${events.length ? `<div class="d-flex flex-wrap gap-1 mt-1 mb-1">${events.join('')}</div>` : ''}
         ${actions.length ? `<div class="d-flex flex-wrap gap-1 mb-1">${actions.join('')}</div>` : ''}
         ${obs.notes ? `<div class="small text-secondary fst-italic mt-1">${obs.notes}</div>` : ''}
+        ${imagesHtml}
     </div>`;
 }
 

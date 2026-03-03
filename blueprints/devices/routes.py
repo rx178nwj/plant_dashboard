@@ -634,46 +634,67 @@ async def read_last_log_from_ble(mac_address):
     """
     import struct
 
-    SERVICE_UUID = "592F4612-9543-9999-12C8-58B459A2712D"
     COMMAND_UUID = "6A3B2C1D-4E5F-6A7B-8C9D-E0F123456791"
     RESPONSE_UUID = "6A3B2C1D-4E5F-6A7B-8C9D-E0F123456792"
 
     CMD_GET_LAST_LOG = 0x1B
 
     response_data = {}
+    disconnect_event = asyncio.Event()
 
     def notification_handler(sender, data):
+        logger.info(f"[last_log] Notification received: {data.hex()} ({len(data)} bytes)")
         if len(data) >= 5:
             resp_id = data[0]
             response_data[resp_id] = data
+        else:
+            logger.warning(f"[last_log] Short notification (<5 bytes): {data.hex()}")
+
+    def disconnected_callback(client):
+        logger.warning(f"[last_log] Device disconnected unexpectedly: {mac_address}")
+        disconnect_event.set()
 
     logger.info(f"Connecting to {mac_address} to fetch last log...")
 
-    async with BleakClient(mac_address) as client:
+    client = BleakClient(mac_address, disconnected_callback=disconnected_callback)
+    await client.connect()
+    logger.info(f"[last_log] Connected to {mac_address}")
+    try:
         await client.start_notify(RESPONSE_UUID, notification_handler)
+        logger.info(f"[last_log] Notification subscribed on {RESPONSE_UUID}")
+
+        packet = struct.pack("<BBH", CMD_GET_LAST_LOG, 0, 0)
+        await client.write_gatt_char(COMMAND_UUID, packet)
+        logger.info(f"[last_log] CMD_GET_LAST_LOG sent: {packet.hex()}")
+
+        for _ in range(100):  # 10秒タイムアウト
+            if CMD_GET_LAST_LOG in response_data:
+                break
+            if disconnect_event.is_set():
+                raise Exception("Device disconnected before response")
+            await asyncio.sleep(0.1)
+
+        if CMD_GET_LAST_LOG not in response_data:
+            raise Exception("Response timeout for CMD_GET_LAST_LOG (0x1B)")
+
+        raw = response_data[CMD_GET_LAST_LOG]
+        status = raw[1]
+        data_len = struct.unpack("<H", raw[3:5])[0]
+        payload = raw[5:5 + data_len]
+
+        if status != 0x00:
+            raise Exception(f"Device returned error status: 0x{status:02X} (buffer may be empty)")
+
+        return payload.decode('utf-8', errors='replace')
+    finally:
         try:
-            packet = struct.pack("<BBH", CMD_GET_LAST_LOG, 0, 0)
-            await client.write_gatt_char(COMMAND_UUID, packet, response=False)
-
-            for _ in range(50):  # 5秒タイムアウト
-                if CMD_GET_LAST_LOG in response_data:
-                    break
-                await asyncio.sleep(0.1)
-
-            if CMD_GET_LAST_LOG not in response_data:
-                raise Exception("Response timeout for CMD_GET_LAST_LOG (0x1B)")
-
-            raw = response_data[CMD_GET_LAST_LOG]
-            status = raw[1]
-            data_len = struct.unpack("<H", raw[3:5])[0]
-            payload = raw[5:5 + data_len]
-
-            if status != 0x00:
-                raise Exception(f"Device returned error status: 0x{status:02X} (buffer may be empty)")
-
-            return payload.decode('utf-8', errors='replace')
-        finally:
             await client.stop_notify(RESPONSE_UUID)
+        except Exception:
+            pass
+        try:
+            await client.disconnect()
+        except Exception:
+            pass
 
 
 async def reboot_device_ble(mac_address):
@@ -722,8 +743,19 @@ def api_get_last_log(device_id):
         log_text = asyncio.run(read_last_log_from_ble(device['mac_address']))
         return jsonify({'success': True, 'log': log_text})
     except Exception as e:
-        logger.error(f"Failed to fetch last log from device: {e}", exc_info=True)
-        return jsonify({'success': False, 'message': f"Communication error: {str(e)}"}), 500
+        err_str = str(e)
+        logger.error(f"Failed to fetch last log from device: {err_str}", exc_info=True)
+        if "disconnected before response" in err_str or "disconnected" in err_str.lower():
+            msg = ("デバイスがコマンド受信後に切断しました。"
+                   "ファームウェアが CMD_GET_LAST_LOG (0x1B) に対応していない可能性があります。"
+                   "ファームウェアを v3.0.0 以上にアップデートしてください。")
+        elif "timeout" in err_str.lower():
+            msg = "タイムアウト: デバイスからの応答がありませんでした。デバイスが近くにあるか確認してください。"
+        elif "error status: 0x01" in err_str:
+            msg = "ログバッファが空です。デバイスの計測サイクル完了後に再度お試しください。"
+        else:
+            msg = f"通信エラー: {err_str}"
+        return jsonify({'success': False, 'message': msg}), 500
 
 
 @devices_bp.route('/api/device/<device_id>/update-settings', methods=['POST'])

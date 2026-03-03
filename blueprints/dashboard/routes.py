@@ -1,7 +1,9 @@
-from flask import Blueprint, render_template, request, jsonify, Response, abort, current_app
+from flask import Blueprint, render_template, request, jsonify, Response, abort, current_app, url_for
 from datetime import date, timedelta
 import json
+import os
 import time
+import uuid
 import httpx
 import logging
 import device_manager as dm
@@ -457,12 +459,33 @@ JSONのみ返してください:"""
         return jsonify({'success': False, 'message': f'AI解析中にエラーが発生しました: {str(e)}'}), 500
 
 
+def _save_obs_images(files):
+    """観察記録の画像ファイルを保存してURLリストを返す（最大3枚）"""
+    obs_folder = os.path.join(current_app.root_path, 'static', 'uploads', 'observation_images')
+    os.makedirs(obs_folder, exist_ok=True)
+    allowed = current_app.config.get('ALLOWED_EXTENSIONS', {'png', 'jpg', 'jpeg', 'gif'})
+    urls = []
+    for f in files[:3]:
+        if not f or not f.filename:
+            continue
+        ext = f.filename.rsplit('.', 1)[-1].lower() if '.' in f.filename else ''
+        if ext not in allowed:
+            continue
+        filename = f"obs_{uuid.uuid4().hex[:12]}.{ext}"
+        f.save(os.path.join(obs_folder, filename))
+        urls.append(url_for('static', filename=f'uploads/observation_images/{filename}'))
+    return urls
+
+
 @dashboard_bp.route('/api/plants/<managed_plant_id>/observation', methods=['POST'])
 @requires_auth
 def api_observation_save(managed_plant_id):
-    """観察記録をDBに保存する"""
-    data = request.json or {}
-    observed_at = data.get('observed_at') or date.today().isoformat()
+    """観察記録をDBに保存する（multipart/form-data）"""
+    form = request.form
+    observed_at = form.get('observed_at') or date.today().isoformat()
+
+    image_files = request.files.getlist('obs-image-upload')
+    image_urls = _save_obs_images(image_files)
 
     conn = dm.get_db_connection()
     try:
@@ -472,22 +495,23 @@ def api_observation_save(managed_plant_id):
                  event_new_bud, event_leaves_dropped, event_flower_stem,
                  event_flowering, event_offset_pup,
                  watered, fertilized, repotted, pruned,
-                 pest_detected, notes)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 pest_detected, notes, observation_images)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             managed_plant_id,
             observed_at,
-            1 if data.get('event_new_bud') else 0,
-            1 if data.get('event_leaves_dropped') else 0,
-            1 if data.get('event_flower_stem') else 0,
-            1 if data.get('event_flowering') else 0,
-            1 if data.get('event_offset_pup') else 0,
-            1 if data.get('watered') else 0,
-            1 if data.get('fertilized') else 0,
-            1 if data.get('repotted') else 0,
-            1 if data.get('pruned') else 0,
-            data.get('pest_detected') or None,
-            data.get('notes') or None
+            1 if form.get('event_new_bud') else 0,
+            1 if form.get('event_leaves_dropped') else 0,
+            1 if form.get('event_flower_stem') else 0,
+            1 if form.get('event_flowering') else 0,
+            1 if form.get('event_offset_pup') else 0,
+            1 if form.get('watered') else 0,
+            1 if form.get('fertilized') else 0,
+            1 if form.get('repotted') else 0,
+            1 if form.get('pruned') else 0,
+            form.get('pest_detected') or None,
+            form.get('notes') or None,
+            json.dumps(image_urls, ensure_ascii=False)
         ))
         conn.commit()
         new_id = cursor.lastrowid
@@ -502,22 +526,102 @@ def api_observation_save(managed_plant_id):
 @dashboard_bp.route('/api/plants/<managed_plant_id>/observations', methods=['GET'])
 @requires_auth
 def api_observations_list(managed_plant_id):
-    """観察履歴一覧を返す"""
-    limit = request.args.get('limit', 20, type=int)
+    """観察履歴一覧を返す（year/month で月フィルタ可能）"""
+    year  = request.args.get('year',  type=int)
+    month = request.args.get('month', type=int)
+
+    if year and month:
+        month_prefix = f"{year:04d}-{month:02d}"
+    else:
+        today = date.today()
+        month_prefix = f"{today.year:04d}-{today.month:02d}"
+
     conn = dm.get_db_connection()
     rows = conn.execute("""
         SELECT id, observed_at,
                event_new_bud, event_leaves_dropped, event_flower_stem,
                event_flowering, event_offset_pup,
                watered, fertilized, repotted, pruned,
-               pest_detected, notes, created_at
+               pest_detected, notes, observation_images, created_at
+        FROM plant_observations
+        WHERE managed_plant_id = ? AND observed_at LIKE ?
+        ORDER BY observed_at DESC, created_at DESC
+    """, (managed_plant_id, f"{month_prefix}%")).fetchall()
+    conn.close()
+    result = []
+    for r in rows:
+        obs = dict(r)
+        obs['observation_images'] = json.loads(obs.get('observation_images') or '[]')
+        result.append(obs)
+    return jsonify({'success': True, 'observations': result})
+
+
+@dashboard_bp.route('/api/plants/<managed_plant_id>/observation-months', methods=['GET'])
+@requires_auth
+def api_observation_months(managed_plant_id):
+    """観察記録のある年月一覧を返す（ナビゲーション用）"""
+    conn = dm.get_db_connection()
+    rows = conn.execute("""
+        SELECT DISTINCT substr(observed_at, 1, 7) as ym
         FROM plant_observations
         WHERE managed_plant_id = ?
-        ORDER BY observed_at DESC, created_at DESC
-        LIMIT ?
-    """, (managed_plant_id, limit)).fetchall()
+        ORDER BY ym DESC
+    """, (managed_plant_id,)).fetchall()
     conn.close()
-    return jsonify({'success': True, 'observations': [dict(r) for r in rows]})
+    return jsonify({'success': True, 'months': [r['ym'] for r in rows]})
+
+
+@dashboard_bp.route('/observations')
+@requires_auth
+def observations_page():
+    """全植物の観察記録一覧ページ"""
+    conn = dm.get_db_connection()
+    plants = conn.execute(
+        "SELECT managed_plant_id, plant_name FROM managed_plants ORDER BY plant_name"
+    ).fetchall()
+    conn.close()
+    return render_template('observations.html', plants=plants, active_page='observations')
+
+
+@dashboard_bp.route('/api/observations')
+@requires_auth
+def api_all_observations():
+    """全植物の観察記録を時系列で返すAPI"""
+    limit = request.args.get('limit', 50, type=int)
+    plant_id = request.args.get('managed_plant_id', '')
+
+    conn = dm.get_db_connection()
+    if plant_id:
+        rows = conn.execute("""
+            SELECT po.*,
+                   mp.plant_name,
+                   COALESCE(mp.image_url, p.image_url) as plant_image_url
+            FROM plant_observations po
+            JOIN managed_plants mp ON po.managed_plant_id = mp.managed_plant_id
+            LEFT JOIN plants p ON mp.library_plant_id = p.plant_id
+            WHERE po.managed_plant_id = ?
+            ORDER BY po.observed_at DESC, po.created_at DESC
+            LIMIT ?
+        """, (plant_id, limit)).fetchall()
+    else:
+        rows = conn.execute("""
+            SELECT po.*,
+                   mp.plant_name,
+                   COALESCE(mp.image_url, p.image_url) as plant_image_url
+            FROM plant_observations po
+            JOIN managed_plants mp ON po.managed_plant_id = mp.managed_plant_id
+            LEFT JOIN plants p ON mp.library_plant_id = p.plant_id
+            ORDER BY po.observed_at DESC, po.created_at DESC
+            LIMIT ?
+        """, (limit,)).fetchall()
+    conn.close()
+
+    result = []
+    for r in rows:
+        obs = dict(r)
+        obs['observation_images'] = json.loads(obs.get('observation_images') or '[]')
+        result.append(obs)
+    return jsonify({'success': True, 'observations': result})
 
 
 @dashboard_bp.route('/stream')

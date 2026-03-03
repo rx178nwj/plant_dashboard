@@ -142,6 +142,8 @@ def migrate_db_schema(cursor):
     if obs_cols and ('health_status' in obs_cols or 'growth_activity' in obs_cols):
         cursor.execute("DROP TABLE plant_observations")
         obs_cols = []
+    if obs_cols and 'observation_images' not in obs_cols:
+        cursor.execute("ALTER TABLE plant_observations ADD COLUMN observation_images TEXT DEFAULT '[]'")
     if not obs_cols:
         cursor.execute("""
             CREATE TABLE plant_observations (
@@ -159,6 +161,7 @@ def migrate_db_schema(cursor):
                 pruned INTEGER DEFAULT 0,
                 pest_detected TEXT,
                 notes TEXT,
+                observation_images TEXT DEFAULT '[]',
                 created_at TEXT DEFAULT (datetime('now','localtime')),
                 FOREIGN KEY (managed_plant_id) REFERENCES managed_plants(managed_plant_id)
             )
@@ -286,6 +289,7 @@ def init_db():
         pruned INTEGER DEFAULT 0,
         pest_detected TEXT,
         notes TEXT,
+        observation_images TEXT DEFAULT '[]',
         created_at TEXT DEFAULT (datetime('now','localtime')),
         FOREIGN KEY (managed_plant_id) REFERENCES managed_plants(managed_plant_id)
     );

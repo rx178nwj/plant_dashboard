@@ -1,0 +1,140 @@
+{% extends 'layout.html' %}
+{% block title %}観察記録 - Plant Dashboard{% endblock %}
+
+{% block content %}
+<!-- ヘッダー -->
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <h4 class="mb-0"><i class="bi bi-journal-text text-success"></i> 観察記録</h4>
+    <div class="d-flex gap-2 flex-wrap">
+        <select id="plant-filter" class="form-select form-select-sm" style="width:auto; min-width:140px;">
+            <option value="">全植物</option>
+            {% for p in plants %}
+            <option value="{{ p.managed_plant_id }}">{{ p.plant_name }}</option>
+            {% endfor %}
+        </select>
+        <select id="limit-select" class="form-select form-select-sm" style="width:auto;">
+            <option value="20">20件</option>
+            <option value="50" selected>50件</option>
+            <option value="100">100件</option>
+        </select>
+        <button id="refresh-btn" class="btn btn-outline-secondary btn-sm" title="更新">
+            <i class="bi bi-arrow-clockwise"></i>
+        </button>
+    </div>
+</div>
+
+<!-- ローディング -->
+<div id="obs-loading" class="text-center py-5 d-none">
+    <div class="spinner-border text-success" role="status">
+        <span class="visually-hidden">読み込み中...</span>
+    </div>
+</div>
+
+<!-- 一覧 -->
+<div id="obs-list"></div>
+
+<!-- 空メッセージ -->
+<div id="obs-empty" class="text-center text-muted py-5 d-none">
+    <i class="bi bi-journal-x" style="font-size:3rem;"></i>
+    <p class="mt-2">観察記録がありません</p>
+</div>
+
+<script>
+const FALLBACK_IMG = 'https://placehold.co/56x56/e8f5e9/4caf50?text=🌱';
+
+function renderCard(obs) {
+    const imgSrc = obs.plant_image_url || FALLBACK_IMG;
+    const plantUrl = '/plant/' + obs.managed_plant_id;
+
+    const events = [];
+    if (obs.event_new_bud)        events.push('<span class="badge bg-success">🌱 芽が出た</span>');
+    if (obs.event_leaves_dropped) events.push('<span class="badge bg-secondary">🍂 葉が落ちた</span>');
+    if (obs.event_flower_stem)    events.push('<span class="badge" style="background-color:#198754;color:#fff">🌿 花の茎が出た</span>');
+    if (obs.event_flowering)      events.push('<span class="badge" style="background-color:#d63384;color:#fff">🌸 花が咲いた</span>');
+    if (obs.event_offset_pup)     events.push('<span class="badge bg-info text-dark">🪴 子株が出た</span>');
+
+    const actions = [];
+    if (obs.watered)    actions.push('<span class="badge bg-primary">💧 水やり</span>');
+    if (obs.fertilized) actions.push('<span class="badge bg-success">🌿 肥料</span>');
+    if (obs.repotted)   actions.push('<span class="badge bg-warning text-dark">🪴 植え替え</span>');
+    if (obs.pruned)     actions.push('<span class="badge bg-secondary">✂️ 剪定</span>');
+    if (obs.pest_detected) actions.push(`<span class="badge bg-danger">🐛 害虫: ${escHtml(obs.pest_detected)}</span>`);
+
+    const badges = [...events, ...actions];
+
+    const photosHtml = (obs.observation_images || []).map(url =>
+        `<a href="${escHtml(url)}" target="_blank" rel="noopener">
+           <img src="${escHtml(url)}" style="height:64px;width:64px;object-fit:cover;border-radius:6px;border:1px solid #dee2e6;" loading="lazy">
+         </a>`
+    ).join('');
+
+    return `
+    <div class="card mb-3 shadow-sm">
+        <div class="card-body py-2 px-3">
+            <div class="d-flex gap-3">
+                <!-- 植物サムネイル -->
+                <a href="${plantUrl}" class="flex-shrink-0">
+                    <img src="${escHtml(imgSrc)}"
+                         style="width:56px;height:56px;object-fit:cover;border-radius:8px;border:1px solid #dee2e6;"
+                         onerror="this.src='${FALLBACK_IMG}'"
+                         loading="lazy">
+                </a>
+                <!-- 内容 -->
+                <div class="flex-grow-1 min-width-0">
+                    <div class="d-flex justify-content-between align-items-start flex-wrap gap-1">
+                        <a href="${plantUrl}" class="fw-bold text-decoration-none text-dark">${escHtml(obs.plant_name)}</a>
+                        <span class="text-muted small">${escHtml(obs.observed_at)}</span>
+                    </div>
+                    ${badges.length ? `<div class="d-flex flex-wrap gap-1 mt-1">${badges.join('')}</div>` : ''}
+                    ${obs.notes ? `<div class="small text-secondary fst-italic mt-1">${escHtml(obs.notes)}</div>` : ''}
+                    ${photosHtml ? `<div class="d-flex gap-1 mt-2 flex-wrap">${photosHtml}</div>` : ''}
+                </div>
+            </div>
+        </div>
+    </div>`;
+}
+
+function escHtml(str) {
+    if (!str) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
+async function loadObservations() {
+    const plantId = document.getElementById('plant-filter').value;
+    const limit   = document.getElementById('limit-select').value;
+    const listEl  = document.getElementById('obs-list');
+    const loadEl  = document.getElementById('obs-loading');
+    const emptyEl = document.getElementById('obs-empty');
+
+    listEl.innerHTML = '';
+    emptyEl.classList.add('d-none');
+    loadEl.classList.remove('d-none');
+
+    try {
+        const params = new URLSearchParams({ limit });
+        if (plantId) params.set('managed_plant_id', plantId);
+        const resp = await fetch('/api/observations?' + params.toString());
+        const data = await resp.json();
+
+        loadEl.classList.add('d-none');
+        if (!data.success || data.observations.length === 0) {
+            emptyEl.classList.remove('d-none');
+            return;
+        }
+        listEl.innerHTML = data.observations.map(renderCard).join('');
+    } catch (e) {
+        loadEl.classList.add('d-none');
+        listEl.innerHTML = '<div class="alert alert-danger">読み込みに失敗しました</div>';
+    }
+}
+
+document.getElementById('plant-filter').addEventListener('change', loadObservations);
+document.getElementById('limit-select').addEventListener('change', loadObservations);
+document.getElementById('refresh-btn').addEventListener('click', loadObservations);
+document.addEventListener('DOMContentLoaded', loadObservations);
+</script>
+{% endblock %}
