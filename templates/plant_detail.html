@@ -440,11 +440,18 @@
                             <div class="mb-3">
                                 <label class="form-label small text-muted"><i class="bi bi-camera"></i> 写真（最大3枚）</label>
                                 <div class="obs-image-preview d-flex gap-2 flex-wrap mb-2"></div>
-                                <label class="btn btn-sm btn-outline-secondary obs-image-add-btn mb-0">
-                                    <i class="bi bi-plus-circle"></i> 写真を追加
-                                    <input type="file" class="obs-image-input d-none" accept="image/*" multiple>
-                                </label>
-                                <span class="obs-image-count small text-muted ms-2">0 / 3</span>
+                                <div class="d-flex gap-2 align-items-center flex-wrap">
+                                    <label class="btn btn-sm btn-outline-secondary obs-image-add-btn mb-0">
+                                        <i class="bi bi-folder2-open"></i> ファイルから追加
+                                        <input type="file" class="obs-image-input d-none" accept="image/*" multiple>
+                                    </label>
+                                    <button type="button" class="btn btn-sm btn-outline-primary obs-camera-btn"
+                                            data-bs-toggle="modal"
+                                            data-bs-target="#obs-camera-modal-{{ plant.managed_plant_id }}">
+                                        <i class="bi bi-camera-fill"></i> カメラで撮影
+                                    </button>
+                                    <span class="obs-image-count small text-muted">0 / 3</span>
+                                </div>
                             </div>
                             <div class="mt-3 d-flex gap-2">
                                 <button type="button" class="btn btn-primary btn-sm obs-save-btn">
@@ -481,6 +488,33 @@
                         </div>
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Camera Modal for Observation Log -->
+<div class="modal fade" id="obs-camera-modal-{{ plant.managed_plant_id }}" tabindex="-1" aria-hidden="true" data-plant-id="{{ plant.managed_plant_id }}">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title mb-0"><i class="bi bi-camera-fill"></i> カメラで撮影</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-2">
+                <div class="ratio ratio-4x3 bg-dark rounded overflow-hidden">
+                    <video class="obs-camera-video w-100 h-100" style="object-fit:cover;" autoplay playsinline muted></video>
+                </div>
+                <div class="obs-camera-error text-danger text-center small py-2 d-none">
+                    <i class="bi bi-exclamation-triangle"></i> カメラを起動できませんでした
+                </div>
+                <canvas class="obs-camera-canvas d-none"></canvas>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+                <button type="button" class="btn btn-sm btn-primary obs-camera-capture-btn">
+                    <i class="bi bi-circle-fill"></i> 撮影
+                </button>
             </div>
         </div>
     </div>

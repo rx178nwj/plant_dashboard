@@ -867,9 +867,11 @@ function initObservationLog(managedPlantId) {
 
     // --- 写真管理 ---
     const imageFiles = [];
-    const imageInput = tabPane.querySelector('.obs-image-input');
+    const imageInput   = tabPane.querySelector('.obs-image-input');
     const imagePreview = tabPane.querySelector('.obs-image-preview');
-    const imageCount = tabPane.querySelector('.obs-image-count');
+    const imageCount   = tabPane.querySelector('.obs-image-count');
+    const cameraBtn    = tabPane.querySelector('.obs-camera-btn');
+    const addBtn       = tabPane.querySelector('.obs-image-add-btn');
 
     function updateImagePreview() {
         if (!imagePreview) return;
@@ -888,7 +890,10 @@ function initObservationLog(managedPlantId) {
             });
             imagePreview.appendChild(wrapper);
         });
+        const atMax = imageFiles.length >= 3;
         if (imageCount) imageCount.textContent = `${imageFiles.length} / 3`;
+        if (addBtn) addBtn.classList.toggle('disabled', atMax);
+        if (cameraBtn) cameraBtn.disabled = atMax;
     }
 
     function clearImages() {
@@ -904,6 +909,58 @@ function initObservationLog(managedPlantId) {
             }
             updateImagePreview();
             imageInput.value = '';  // 同一ファイル再選択を可能にする
+        });
+    }
+
+    // --- カメラ撮影 ---
+    const cameraModalEl     = document.getElementById(`obs-camera-modal-${managedPlantId}`);
+    const cameraVideo       = cameraModalEl?.querySelector('.obs-camera-video');
+    const cameraCanvas      = cameraModalEl?.querySelector('.obs-camera-canvas');
+    const cameraCaptureBtn  = cameraModalEl?.querySelector('.obs-camera-capture-btn');
+    const cameraErrorEl     = cameraModalEl?.querySelector('.obs-camera-error');
+    let cameraStream = null;
+
+    async function startCamera() {
+        if (!cameraVideo) return;
+        if (cameraErrorEl) cameraErrorEl.classList.add('d-none');
+        try {
+            cameraStream = await navigator.mediaDevices.getUserMedia({
+                video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 960 } }
+            });
+            cameraVideo.srcObject = cameraStream;
+        } catch (err) {
+            if (cameraErrorEl) cameraErrorEl.classList.remove('d-none');
+            if (cameraCaptureBtn) cameraCaptureBtn.disabled = true;
+        }
+    }
+
+    function stopCamera() {
+        if (cameraStream) {
+            cameraStream.getTracks().forEach(t => t.stop());
+            cameraStream = null;
+        }
+        if (cameraVideo) cameraVideo.srcObject = null;
+        if (cameraCaptureBtn) cameraCaptureBtn.disabled = false;
+    }
+
+    if (cameraModalEl) {
+        cameraModalEl.addEventListener('shown.bs.modal', startCamera);
+        cameraModalEl.addEventListener('hidden.bs.modal', stopCamera);
+    }
+
+    if (cameraCaptureBtn) {
+        cameraCaptureBtn.addEventListener('click', () => {
+            if (!cameraVideo || !cameraCanvas || imageFiles.length >= 3) return;
+            cameraCanvas.width  = cameraVideo.videoWidth  || 1280;
+            cameraCanvas.height = cameraVideo.videoHeight || 960;
+            cameraCanvas.getContext('2d').drawImage(cameraVideo, 0, 0);
+            cameraCanvas.toBlob(blob => {
+                if (!blob) return;
+                const file = new File([blob], `camera_${Date.now()}.jpg`, { type: 'image/jpeg' });
+                imageFiles.push(file);
+                updateImagePreview();
+                bootstrap.Modal.getInstance(cameraModalEl)?.hide();
+            }, 'image/jpeg', 0.92);
         });
     }
 
