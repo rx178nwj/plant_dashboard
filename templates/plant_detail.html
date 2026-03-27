@@ -190,9 +190,6 @@
                 <li class="nav-item" role="presentation">
                     <button class="nav-link" id="analysis-log-tab" data-bs-toggle="tab" data-bs-target="#analysis-log" type="button" role="tab" aria-controls="analysis-log" aria-selected="false">Analysis Log</button>
                 </li>
-                <li class="nav-item" role="presentation">
-                    <button class="nav-link" id="observation-log-tab" data-bs-toggle="tab" data-bs-target="#observation-log-{{ plant.managed_plant_id }}" type="button" role="tab" aria-controls="observation-log-{{ plant.managed_plant_id }}" aria-selected="false">Observation Log</button>
-                </li>
             </ul>
             <div class="tab-content" id="historyTabContent">
                 <!-- Analysis Log Tab -->
@@ -358,133 +355,140 @@
                     </div>
                     {% endif %}
                 </div>
-                <!-- Observation Log Tab -->
-                <div class="tab-pane fade" id="observation-log-{{ plant.managed_plant_id }}" role="tabpanel" aria-labelledby="observation-log-tab"
-                     data-managed-plant-id="{{ plant.managed_plant_id }}">
-                    <!-- New Observation Input -->
-                    <div class="card shadow-sm mb-3">
-                        <div class="card-header d-flex justify-content-between align-items-center">
-                            <h5 class="mb-0"><i class="bi bi-pencil-square"></i> 観察記録を追加</h5>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 観察記録セクション（タブ外） -->
+<div id="observation-section-{{ plant.managed_plant_id }}"
+     class="mt-4" data-managed-plant-id="{{ plant.managed_plant_id }}">
+    <div class="row">
+        <!-- 入力フォーム -->
+        <div class="col-lg-5 mb-4">
+            <div class="card shadow-sm h-100">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-pencil-square"></i> 観察記録を追加</h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-2">
+                        <label class="form-label small text-muted">観察日</label>
+                        <input type="date" class="form-control form-control-sm obs-observed-at" style="width:auto;" value="{{ today_date }}">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">観察メモ</label>
+                        <textarea class="form-control obs-free-text" rows="2" placeholder="例: 新しい芽が出てきた。今日水やりした。"></textarea>
+                        <div class="d-flex gap-2 mt-2">
+                            <button type="button" class="btn btn-outline-primary btn-sm obs-parse-btn">
+                                <i class="bi bi-robot"></i> AI解析
+                            </button>
+                            <span class="obs-parse-status text-muted small align-self-center"></span>
                         </div>
-                        <div class="card-body">
-                            <div class="mb-2">
-                                <label class="form-label small text-muted">観察日</label>
-                                <input type="date" class="form-control form-control-sm obs-observed-at" style="width:auto;" value="{{ today_date }}">
+                    </div>
+                    <hr class="my-2">
+                    <!-- 活性イベント -->
+                    <div class="mb-2">
+                        <label class="form-label small fw-bold"><i class="bi bi-activity text-success"></i> 活性イベント</label>
+                        <div class="d-flex flex-wrap gap-3">
+                            <div class="form-check">
+                                <input class="form-check-input obs-event-new-bud" type="checkbox" id="obs-new-bud-{{ plant.managed_plant_id }}">
+                                <label class="form-check-label" for="obs-new-bud-{{ plant.managed_plant_id }}">🌱 芽が出た</label>
                             </div>
-                            <!-- Free text input + AI parse -->
-                            <div class="mb-3">
-                                <label class="form-label fw-bold">観察メモ <span class="text-muted fw-normal small">（自由入力 → AIがチェックボックスを自動判定）</span></label>
-                                <textarea class="form-control obs-free-text" rows="2" placeholder="例: 新しい芽が出てきた。今日水やりした。花の茎が出てきた。"></textarea>
-                                <div class="d-flex gap-2 mt-2">
-                                    <button type="button" class="btn btn-outline-primary btn-sm obs-parse-btn">
-                                        <i class="bi bi-robot"></i> AI解析
-                                    </button>
-                                    <span class="obs-parse-status text-muted small align-self-center"></span>
-                                </div>
+                            <div class="form-check">
+                                <input class="form-check-input obs-event-leaves-dropped" type="checkbox" id="obs-leaves-dropped-{{ plant.managed_plant_id }}">
+                                <label class="form-check-label" for="obs-leaves-dropped-{{ plant.managed_plant_id }}">🍂 葉が落ちた</label>
                             </div>
-                            <hr class="my-2">
-                            <!-- Activity events -->
-                            <div class="mb-3">
-                                <label class="form-label small fw-bold"><i class="bi bi-activity text-success"></i> 活性イベント</label>
-                                <div class="d-flex flex-wrap gap-3">
-                                    <div class="form-check">
-                                        <input class="form-check-input obs-event-new-bud" type="checkbox" id="obs-new-bud-{{ plant.managed_plant_id }}">
-                                        <label class="form-check-label" for="obs-new-bud-{{ plant.managed_plant_id }}">🌱 芽が出た</label>
-                                    </div>
-                                    <div class="form-check">
-                                        <input class="form-check-input obs-event-leaves-dropped" type="checkbox" id="obs-leaves-dropped-{{ plant.managed_plant_id }}">
-                                        <label class="form-check-label" for="obs-leaves-dropped-{{ plant.managed_plant_id }}">🍂 葉が落ちた</label>
-                                    </div>
-                                    <div class="form-check">
-                                        <input class="form-check-input obs-event-flower-stem" type="checkbox" id="obs-flower-stem-{{ plant.managed_plant_id }}">
-                                        <label class="form-check-label" for="obs-flower-stem-{{ plant.managed_plant_id }}">🌿 花の茎が出た</label>
-                                    </div>
-                                    <div class="form-check">
-                                        <input class="form-check-input obs-event-flowering" type="checkbox" id="obs-flowering-{{ plant.managed_plant_id }}">
-                                        <label class="form-check-label" for="obs-flowering-{{ plant.managed_plant_id }}">🌸 花が咲いた</label>
-                                    </div>
-                                    <div class="form-check">
-                                        <input class="form-check-input obs-event-offset-pup" type="checkbox" id="obs-offset-pup-{{ plant.managed_plant_id }}">
-                                        <label class="form-check-label" for="obs-offset-pup-{{ plant.managed_plant_id }}">🪴 子株が出た</label>
-                                    </div>
-                                </div>
+                            <div class="form-check">
+                                <input class="form-check-input obs-event-flower-stem" type="checkbox" id="obs-flower-stem-{{ plant.managed_plant_id }}">
+                                <label class="form-check-label" for="obs-flower-stem-{{ plant.managed_plant_id }}">🌿 花の茎が出た</label>
                             </div>
-                            <!-- Care actions -->
-                            <div class="mb-3">
-                                <label class="form-label small fw-bold"><i class="bi bi-tools text-secondary"></i> 実施した作業</label>
-                                <div class="d-flex flex-wrap gap-3">
-                                    <div class="form-check">
-                                        <input class="form-check-input obs-watered" type="checkbox" id="obs-watered-{{ plant.managed_plant_id }}">
-                                        <label class="form-check-label" for="obs-watered-{{ plant.managed_plant_id }}">💧 水やり</label>
-                                    </div>
-                                    <div class="form-check">
-                                        <input class="form-check-input obs-fertilized" type="checkbox" id="obs-fertilized-{{ plant.managed_plant_id }}">
-                                        <label class="form-check-label" for="obs-fertilized-{{ plant.managed_plant_id }}">🌿 肥料</label>
-                                    </div>
-                                    <div class="form-check">
-                                        <input class="form-check-input obs-repotted" type="checkbox" id="obs-repotted-{{ plant.managed_plant_id }}">
-                                        <label class="form-check-label" for="obs-repotted-{{ plant.managed_plant_id }}">🪴 植え替え</label>
-                                    </div>
-                                    <div class="form-check">
-                                        <input class="form-check-input obs-pruned" type="checkbox" id="obs-pruned-{{ plant.managed_plant_id }}">
-                                        <label class="form-check-label" for="obs-pruned-{{ plant.managed_plant_id }}">✂️ 剪定</label>
-                                    </div>
-                                </div>
+                            <div class="form-check">
+                                <input class="form-check-input obs-event-flowering" type="checkbox" id="obs-flowering-{{ plant.managed_plant_id }}">
+                                <label class="form-check-label" for="obs-flowering-{{ plant.managed_plant_id }}">🌸 花が咲いた</label>
                             </div>
-                            <!-- Pest -->
-                            <div class="mb-2">
-                                <label class="form-label small"><i class="bi bi-bug text-danger"></i> 害虫名（確認した場合のみ）</label>
-                                <input type="text" class="form-control form-control-sm obs-pest-detected" style="max-width:250px;" placeholder="例: アブラムシ、カイガラムシ">
-                            </div>
-                            <!-- Photos -->
-                            <div class="mb-3">
-                                <label class="form-label small text-muted"><i class="bi bi-camera"></i> 写真（最大3枚）</label>
-                                <div class="obs-image-preview d-flex gap-2 flex-wrap mb-2"></div>
-                                <div class="d-flex gap-2 align-items-center flex-wrap">
-                                    <label class="btn btn-sm btn-outline-secondary obs-image-add-btn mb-0">
-                                        <i class="bi bi-folder2-open"></i> ファイルから追加
-                                        <input type="file" class="obs-image-input d-none" accept="image/*" multiple>
-                                    </label>
-                                    <button type="button" class="btn btn-sm btn-outline-primary obs-camera-btn"
-                                            data-bs-toggle="modal"
-                                            data-bs-target="#obs-camera-modal-{{ plant.managed_plant_id }}">
-                                        <i class="bi bi-camera-fill"></i> カメラで撮影
-                                    </button>
-                                    <span class="obs-image-count small text-muted">0 / 3</span>
-                                </div>
-                            </div>
-                            <div class="mt-3 d-flex gap-2">
-                                <button type="button" class="btn btn-primary btn-sm obs-save-btn">
-                                    <i class="bi bi-save"></i> 保存
-                                </button>
-                                <button type="button" class="btn btn-outline-secondary btn-sm obs-reset-btn">
-                                    <i class="bi bi-x-circle"></i> リセット
-                                </button>
-                                <span class="obs-save-status text-muted small align-self-center"></span>
+                            <div class="form-check">
+                                <input class="form-check-input obs-event-offset-pup" type="checkbox" id="obs-offset-pup-{{ plant.managed_plant_id }}">
+                                <label class="form-check-label" for="obs-offset-pup-{{ plant.managed_plant_id }}">🪴 子株が出た</label>
                             </div>
                         </div>
                     </div>
-                    <!-- Observation History -->
-                    <div class="card shadow-sm">
-                        <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
-                            <h5 class="mb-0"><i class="bi bi-clock-history"></i> 観察履歴</h5>
-                            <div class="d-flex align-items-center gap-1">
-                                <button type="button" class="btn btn-outline-secondary btn-sm obs-prev-month-btn" title="前の月">
-                                    <i class="bi bi-chevron-left"></i>
-                                </button>
-                                <span class="obs-month-label fw-bold small px-2" style="min-width:88px;text-align:center;"></span>
-                                <button type="button" class="btn btn-outline-secondary btn-sm obs-next-month-btn" title="次の月">
-                                    <i class="bi bi-chevron-right"></i>
-                                </button>
-                                <button type="button" class="btn btn-outline-secondary btn-sm obs-refresh-btn ms-1" title="更新">
-                                    <i class="bi bi-arrow-clockwise"></i>
-                                </button>
+                    <!-- 実施した作業 -->
+                    <div class="mb-2">
+                        <label class="form-label small fw-bold"><i class="bi bi-tools text-secondary"></i> 実施した作業</label>
+                        <div class="d-flex flex-wrap gap-3">
+                            <div class="form-check">
+                                <input class="form-check-input obs-watered" type="checkbox" id="obs-watered-{{ plant.managed_plant_id }}">
+                                <label class="form-check-label" for="obs-watered-{{ plant.managed_plant_id }}">💧 水やり</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input obs-fertilized" type="checkbox" id="obs-fertilized-{{ plant.managed_plant_id }}">
+                                <label class="form-check-label" for="obs-fertilized-{{ plant.managed_plant_id }}">🌿 肥料</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input obs-repotted" type="checkbox" id="obs-repotted-{{ plant.managed_plant_id }}">
+                                <label class="form-check-label" for="obs-repotted-{{ plant.managed_plant_id }}">🪴 植え替え</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input obs-pruned" type="checkbox" id="obs-pruned-{{ plant.managed_plant_id }}">
+                                <label class="form-check-label" for="obs-pruned-{{ plant.managed_plant_id }}">✂️ 剪定</label>
                             </div>
                         </div>
-                        <div class="card-body p-2">
-                            <div class="obs-history-container" style="max-height: 60vh; overflow-y: auto;">
-                                <div class="text-center text-muted py-3 obs-history-empty">タブを開くと履歴を読み込みます</div>
-                            </div>
+                    </div>
+                    <!-- 害虫 -->
+                    <div class="mb-2">
+                        <label class="form-label small"><i class="bi bi-bug text-danger"></i> 害虫名（確認した場合のみ）</label>
+                        <input type="text" class="form-control form-control-sm obs-pest-detected" style="max-width:250px;" placeholder="例: アブラムシ">
+                    </div>
+                    <!-- 写真 -->
+                    <div class="mb-3">
+                        <label class="form-label small text-muted"><i class="bi bi-camera"></i> 写真（最大3枚）</label>
+                        <div class="obs-image-preview d-flex gap-2 flex-wrap mb-2"></div>
+                        <div class="d-flex gap-2 align-items-center flex-wrap">
+                            <label class="btn btn-sm btn-outline-secondary obs-image-add-btn mb-0">
+                                <i class="bi bi-folder2-open"></i> ファイル
+                                <input type="file" class="obs-image-input d-none" accept="image/*" multiple>
+                            </label>
+                            <label class="btn btn-sm btn-outline-primary obs-camera-btn mb-0">
+                                <i class="bi bi-camera-fill"></i> カメラ
+                                <input type="file" class="obs-camera-input d-none" accept="image/*" capture="environment">
+                            </label>
+                            <span class="obs-image-count small text-muted">0 / 3</span>
+                        </div>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-primary btn-sm obs-save-btn">
+                            <i class="bi bi-save"></i> 保存
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm obs-reset-btn">
+                            <i class="bi bi-x-circle"></i> リセット
+                        </button>
+                        <span class="obs-save-status text-muted small align-self-center"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- 観察履歴 -->
+        <div class="col-lg-7 mb-4">
+            <div class="card shadow-sm h-100">
+                <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <h5 class="mb-0"><i class="bi bi-clock-history"></i> 観察履歴</h5>
+                    <div class="d-flex align-items-center gap-1">
+                        <button type="button" class="btn btn-outline-secondary btn-sm obs-prev-month-btn" title="前の月">
+                            <i class="bi bi-chevron-left"></i>
+                        </button>
+                        <span class="obs-month-label fw-bold small px-2" style="min-width:88px;text-align:center;"></span>
+                        <button type="button" class="btn btn-outline-secondary btn-sm obs-next-month-btn" title="次の月">
+                            <i class="bi bi-chevron-right"></i>
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm obs-refresh-btn ms-1" title="更新">
+                            <i class="bi bi-arrow-clockwise"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body p-2">
+                    <div class="obs-history-container" style="max-height: 60vh; overflow-y: auto;">
+                        <div class="text-center text-muted py-3">
+                            <div class="spinner-border spinner-border-sm text-success" role="status"></div>
                         </div>
                     </div>
                 </div>
@@ -493,32 +497,6 @@
     </div>
 </div>
 
-<!-- Camera Modal for Observation Log -->
-<div class="modal fade" id="obs-camera-modal-{{ plant.managed_plant_id }}" tabindex="-1" aria-hidden="true" data-plant-id="{{ plant.managed_plant_id }}">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content">
-            <div class="modal-header py-2">
-                <h6 class="modal-title mb-0"><i class="bi bi-camera-fill"></i> カメラで撮影</h6>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body p-2">
-                <div class="ratio ratio-4x3 bg-dark rounded overflow-hidden">
-                    <video class="obs-camera-video w-100 h-100" style="object-fit:cover;" autoplay playsinline muted></video>
-                </div>
-                <div class="obs-camera-error text-danger text-center small py-2 d-none">
-                    <i class="bi bi-exclamation-triangle"></i> カメラを起動できませんでした
-                </div>
-                <canvas class="obs-camera-canvas d-none"></canvas>
-            </div>
-            <div class="modal-footer py-2">
-                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">キャンセル</button>
-                <button type="button" class="btn btn-sm btn-primary obs-camera-capture-btn">
-                    <i class="bi bi-circle-fill"></i> 撮影
-                </button>
-            </div>
-        </div>
-    </div>
-</div>
 
 <style>
 .map-responsive {

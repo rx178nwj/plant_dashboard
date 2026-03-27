@@ -856,22 +856,22 @@ async function updateSensorHistoryChart(deviceId, period, chartInstances, select
 // =============================================================================
 
 function initObservationLog(managedPlantId) {
-    const tabPane = document.getElementById(`observation-log-${managedPlantId}`);
+    const tabPane = document.getElementById(`observation-section-${managedPlantId}`);
     if (!tabPane) return;
 
     const parseBtn = tabPane.querySelector('.obs-parse-btn');
     const saveBtn = tabPane.querySelector('.obs-save-btn');
     const resetBtn = tabPane.querySelector('.obs-reset-btn');
     const refreshBtn = tabPane.querySelector('.obs-refresh-btn');
-    const tabButton = document.getElementById('observation-log-tab');
 
     // --- 写真管理 ---
     const imageFiles = [];
     const imageInput   = tabPane.querySelector('.obs-image-input');
     const imagePreview = tabPane.querySelector('.obs-image-preview');
     const imageCount   = tabPane.querySelector('.obs-image-count');
-    const cameraBtn    = tabPane.querySelector('.obs-camera-btn');
     const addBtn       = tabPane.querySelector('.obs-image-add-btn');
+    const cameraBtn    = tabPane.querySelector('.obs-camera-btn');
+    const cameraInput  = tabPane.querySelector('.obs-camera-input');
 
     function updateImagePreview() {
         if (!imagePreview) return;
@@ -893,7 +893,7 @@ function initObservationLog(managedPlantId) {
         const atMax = imageFiles.length >= 3;
         if (imageCount) imageCount.textContent = `${imageFiles.length} / 3`;
         if (addBtn) addBtn.classList.toggle('disabled', atMax);
-        if (cameraBtn) cameraBtn.disabled = atMax;
+        if (cameraBtn) cameraBtn.classList.toggle('disabled', atMax);
     }
 
     function clearImages() {
@@ -901,66 +901,25 @@ function initObservationLog(managedPlantId) {
         updateImagePreview();
     }
 
+    function addFilesToQueue(files) {
+        for (const file of files) {
+            if (imageFiles.length >= 3) break;
+            imageFiles.push(file);
+        }
+        updateImagePreview();
+    }
+
     if (imageInput) {
         imageInput.addEventListener('change', (e) => {
-            for (const file of e.target.files) {
-                if (imageFiles.length >= 3) break;
-                imageFiles.push(file);
-            }
-            updateImagePreview();
-            imageInput.value = '';  // 同一ファイル再選択を可能にする
+            addFilesToQueue(e.target.files);
+            imageInput.value = '';
         });
     }
 
-    // --- カメラ撮影 ---
-    const cameraModalEl     = document.getElementById(`obs-camera-modal-${managedPlantId}`);
-    const cameraVideo       = cameraModalEl?.querySelector('.obs-camera-video');
-    const cameraCanvas      = cameraModalEl?.querySelector('.obs-camera-canvas');
-    const cameraCaptureBtn  = cameraModalEl?.querySelector('.obs-camera-capture-btn');
-    const cameraErrorEl     = cameraModalEl?.querySelector('.obs-camera-error');
-    let cameraStream = null;
-
-    async function startCamera() {
-        if (!cameraVideo) return;
-        if (cameraErrorEl) cameraErrorEl.classList.add('d-none');
-        try {
-            cameraStream = await navigator.mediaDevices.getUserMedia({
-                video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 960 } }
-            });
-            cameraVideo.srcObject = cameraStream;
-        } catch (err) {
-            if (cameraErrorEl) cameraErrorEl.classList.remove('d-none');
-            if (cameraCaptureBtn) cameraCaptureBtn.disabled = true;
-        }
-    }
-
-    function stopCamera() {
-        if (cameraStream) {
-            cameraStream.getTracks().forEach(t => t.stop());
-            cameraStream = null;
-        }
-        if (cameraVideo) cameraVideo.srcObject = null;
-        if (cameraCaptureBtn) cameraCaptureBtn.disabled = false;
-    }
-
-    if (cameraModalEl) {
-        cameraModalEl.addEventListener('shown.bs.modal', startCamera);
-        cameraModalEl.addEventListener('hidden.bs.modal', stopCamera);
-    }
-
-    if (cameraCaptureBtn) {
-        cameraCaptureBtn.addEventListener('click', () => {
-            if (!cameraVideo || !cameraCanvas || imageFiles.length >= 3) return;
-            cameraCanvas.width  = cameraVideo.videoWidth  || 1280;
-            cameraCanvas.height = cameraVideo.videoHeight || 960;
-            cameraCanvas.getContext('2d').drawImage(cameraVideo, 0, 0);
-            cameraCanvas.toBlob(blob => {
-                if (!blob) return;
-                const file = new File([blob], `camera_${Date.now()}.jpg`, { type: 'image/jpeg' });
-                imageFiles.push(file);
-                updateImagePreview();
-                bootstrap.Modal.getInstance(cameraModalEl)?.hide();
-            }, 'image/jpeg', 0.92);
+    if (cameraInput) {
+        cameraInput.addEventListener('change', (e) => {
+            addFilesToQueue(e.target.files);
+            cameraInput.value = '';
         });
     }
 
@@ -1003,16 +962,8 @@ function initObservationLog(managedPlantId) {
     }
     updateMonthLabel();
 
-    // Load history when tab is first shown
-    let historyLoaded = false;
-    if (tabButton) {
-        tabButton.addEventListener('shown.bs.tab', () => {
-            if (!historyLoaded) {
-                reloadCurrentMonth();
-                historyLoaded = true;
-            }
-        });
-    }
+    // ページ読み込み時に即時ロード
+    reloadCurrentMonth();
 
     if (parseBtn) {
         parseBtn.addEventListener('click', async () => {
@@ -1122,7 +1073,7 @@ function initObservationLog(managedPlantId) {
 }
 
 function applyParsedData(managedPlantId, parsed) {
-    const tabPane = document.getElementById(`observation-log-${managedPlantId}`);
+    const tabPane = document.getElementById(`observation-section-${managedPlantId}`);
     if (!tabPane || !parsed) return;
 
     const setSelect = (selector, value) => {
@@ -1149,7 +1100,7 @@ function applyParsedData(managedPlantId, parsed) {
 }
 
 async function loadObservationHistory(managedPlantId, year, month) {
-    const tabPane = document.getElementById(`observation-log-${managedPlantId}`);
+    const tabPane = document.getElementById(`observation-section-${managedPlantId}`);
     if (!tabPane) return;
     const container = tabPane.querySelector('.obs-history-container');
     if (!container) return;
@@ -1206,7 +1157,7 @@ function renderObservationCard(obs) {
 }
 
 function resetObservationForm(managedPlantId) {
-    const tabPane = document.getElementById(`observation-log-${managedPlantId}`);
+    const tabPane = document.getElementById(`observation-section-${managedPlantId}`);
     if (!tabPane) return;
     tabPane.querySelector('.obs-free-text').value = '';
     tabPane.querySelector('.obs-event-new-bud').checked = false;
